@@ -229,21 +229,22 @@ public sealed class SettingsWindow(
                 "wrong on this client.");
 
             var increaseOnDamage = configuration.IncreaseScaleOnDamageTaken;
-            if (ImGui.Checkbox("Damage Taken Increases Scale", ref increaseOnDamage))
+            if (ImGui.Checkbox("Damage Taken Affects Scale", ref increaseOnDamage))
             {
                 configuration.IncreaseScaleOnDamageTaken = increaseOnDamage;
                 configuration.Save();
             }
 
             var damageIncrease = configuration.DamageTakenScaleIncrease;
-            if (ImGui.SliderFloat("Damage Taken Increase Amount", ref damageIncrease, 0.00f, 0.25f, "%.3f"))
+            if (ImGui.SliderFloat("Damage Taken Scale Amount", ref damageIncrease, -0.25f, 0.25f, "%.3f"))
             {
                 configuration.DamageTakenScaleIncrease = damageIncrease;
                 configuration.Save();
             }
             ImGui.TextDisabled("Fires on every HP decrease while in combat, including DoT ticks (never " +
-                "out of combat). Capped at whichever Maximum Scaling " +
-                "currently applies.");
+                "out of combat). Positive values raise scale, negative values lower it - either " +
+                "direction is clamped between Minimum Scaling and whichever Maximum Scaling currently " +
+                "applies.");
 
             var triggerCooldown = configuration.DamageTriggerCooldownSeconds;
             if (ImGui.SliderFloat("Damage Trigger Cooldown (Seconds)", ref triggerCooldown, 0.0f, 5.0f, "%.1f"))
@@ -254,18 +255,21 @@ public sealed class SettingsWindow(
             ImGui.TextDisabled("0 = no limit, fires on every HP decrease.");
 
             var jumpEnabled = configuration.JumpIncreasesScaleEnabled;
-            if (ImGui.Checkbox("Jumping Increases Scale", ref jumpEnabled))
+            if (ImGui.Checkbox("Jumping Affects Scale", ref jumpEnabled))
             {
                 configuration.JumpIncreasesScaleEnabled = jumpEnabled;
                 configuration.Save();
             }
 
             var jumpIncrease = configuration.JumpScaleIncreaseAmount;
-            if (ImGui.SliderFloat("Jump Scale Increase Amount", ref jumpIncrease, 0.00f, 0.25f, "%.3f"))
+            if (ImGui.SliderFloat("Jump Scale Amount", ref jumpIncrease, -0.25f, 0.25f, "%.3f"))
             {
                 configuration.JumpScaleIncreaseAmount = jumpIncrease;
                 configuration.Save();
             }
+            ImGui.TextDisabled("Positive values raise scale per jump, negative values lower it - either " +
+                "direction is clamped between Minimum Scaling and Maximum Scaling (In Combat), always, " +
+                "same as before.");
 
             var jumpTriggerCooldown = configuration.JumpTriggerCooldownSeconds;
             if (ImGui.SliderFloat("Jump Trigger Cooldown (Seconds)", ref jumpTriggerCooldown, 0.0f, 5.0f, "%.1f"))
@@ -589,6 +593,24 @@ public sealed class SettingsWindow(
             "damage-taken events, an active Self Sucking/Shake Drink boost, or the /attention emote all " +
             "count as activity and fade it back in instantly. 0 duration means an instant snap instead " +
             "of an eased fade.");
+
+        var hudShowAboveScaleEnabled = configuration.HudShowAboveScaleEnabled;
+        if (ImGui.Checkbox("Show When Scale Reaches Threshold", ref hudShowAboveScaleEnabled))
+        {
+            configuration.HudShowAboveScaleEnabled = hudShowAboveScaleEnabled;
+            configuration.Save();
+        }
+
+        var hudShowAboveScaleThreshold = configuration.HudShowAboveScaleThreshold;
+        if (ImGui.SliderFloat("Show Above Scale", ref hudShowAboveScaleThreshold, 0.10f, 3.00f, "%.2f"))
+        {
+            configuration.HudShowAboveScaleThreshold = hudShowAboveScaleThreshold;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("While the applied scale is at or above this value, the gauge is kept awake " +
+            "(or woken back up if already faded) the same way an ability use or /attention would - " +
+            "independent of the idle-fade settings above, so it works even while HudFadeOnIdleEnabled " +
+            "would otherwise have hidden it by now.");
 
         var hudHideOutOfCombat = configuration.HudHideOutOfCombat;
         if (ImGui.Checkbox("Hide Entirely Out of Combat", ref hudHideOutOfCombat))

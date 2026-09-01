@@ -651,16 +651,21 @@ public sealed class Plugin : IDalamudPlugin
                 var triggerNow = ImGuiNowSeconds();
                 if (triggerNow - lastDamageTriggerTime >= Configuration.DamageTriggerCooldownSeconds)
                 {
-                    // Capped at the same ceiling passive growth
-                    // targets (context-dependent by combat state),
-                    // not a fixed value - this acts like an
-                    // accelerated burst of the same regen, not its
-                    // own separate cap.
+                    // Capped/floored at whatever range currently
+                    // applies (context-dependent by combat state,
+                    // same as passive growth's own ceiling) - Clamp
+                    // rather than a plain Min, since
+                    // DamageTakenScaleIncrease can now be negative
+                    // (Damage Taken Affects Scale, not just
+                    // "Increases") - a negative amount needs the LOWER
+                    // bound enforced too, not just the upper one Min
+                    // alone would have handled for the positive case.
                     var ceiling = Condition[ConditionFlag.InCombat]
                         ? Configuration.JobUpperLimitScale
                         : Configuration.JobBaselineScale;
-                    jobCurrentScale = System.Math.Min(
+                    jobCurrentScale = System.Math.Clamp(
                         jobCurrentScale + Configuration.DamageTakenScaleIncrease,
+                        Configuration.JobCombatFloorScale,
                         ceiling);
                     // No particle burst for the increase variant
                     // (that's specifically an "empty the gauge"
@@ -744,7 +749,16 @@ public sealed class Plugin : IDalamudPlugin
                     var jumpTriggerNow = ImGuiNowSeconds();
                     if (jumpTriggerNow - lastJumpTriggerTime >= Configuration.JumpTriggerCooldownSeconds)
                     {
-                        jobCurrentScale = System.Math.Min(jobCurrentScale + Configuration.JumpScaleIncreaseAmount, Configuration.JobUpperLimitScale);
+                        // Clamp, not a plain Min - see the matching
+                        // comment on the damage-taken variant above
+                        // for why: JumpScaleIncreaseAmount can now be
+                        // negative (Jumping Affects Scale, not just
+                        // "Increases"), which needs the lower bound
+                        // enforced too.
+                        jobCurrentScale = System.Math.Clamp(
+                            jobCurrentScale + Configuration.JumpScaleIncreaseAmount,
+                            Configuration.JobCombatFloorScale,
+                            Configuration.JobUpperLimitScale);
                         hudGauge.WakeFromIdle();
                         lastJumpTriggerTime = jumpTriggerNow;
                     }
@@ -780,6 +794,17 @@ public sealed class Plugin : IDalamudPlugin
         // the auto-trigger forced it or because it's being performed
         // manually.
         if (Configuration.GuardWakeEnabled && emoteLoopTracker.IsGuardActive(Configuration))
+            hudGauge.WakeFromIdle();
+
+        // Scale-threshold wake: same cheap every-frame WakeFromIdle()
+        // pattern as /attention and /guard above, just driven by the
+        // applied scale value crossing a configured threshold instead
+        // of an emote. Continuously re-wakes for as long as scale
+        // stays at or above HudShowAboveScaleThreshold, so the gauge
+        // stays visible (or reappears if already faded) the whole time
+        // - once scale drops back below, the normal idle timer resumes
+        // counting down from that point like any other wake.
+        if (Configuration.HudShowAboveScaleEnabled && GetAppliedScale() >= Configuration.HudShowAboveScaleThreshold)
             hudGauge.WakeFromIdle();
 
         // Self Sucking auto-attention-swap + burp: while /cackle's drain

@@ -392,23 +392,29 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// If true, every time the player's HP decreases while in combat
     /// (any damage taken, checked frame-to-frame - never triggers out of
-    /// combat), the current job scale is immediately INCREASED by
-    /// DamageTakenScaleIncrease, capped at whichever ceiling passive
-    /// growth currently targets (JobUpperLimitScale in combat,
-    /// JobBaselineScale out of combat) rather than a fixed value - it
-    /// behaves like an accelerated burst of the same regen, not its own
-    /// separate cap. Checked every frame regardless of Mode, same as the
-    /// death-reset toggle. Fires on every HP tick while in combat, so a
-    /// fast-ticking DoT or sustained AoE can trigger it repeatedly in
-    /// quick succession - keep DamageTakenScaleIncrease small unless
-    /// that's the effect you want. Off by default. A mirror-image
-    /// "Damage Taken Reduces Scale" toggle existed here previously but
-    /// was removed per request, in favor of GcdReducesScaleEnabled below
-    /// as the primary way to fight the scale back down.
+    /// combat), the current job scale is immediately adjusted by
+    /// DamageTakenScaleIncrease (added, so a positive value raises scale
+    /// and a negative value lowers it - "Damage Taken Affects Scale" in
+    /// the settings window, previously "Increases" back when only the
+    /// positive direction was supported), clamped between
+    /// JobCombatFloorScale and whichever ceiling passive growth
+    /// currently targets (JobUpperLimitScale in combat, JobBaselineScale
+    /// out of combat) rather than a fixed value - it behaves like an
+    /// accelerated burst of the same regen (or, with a negative amount,
+    /// an accelerated drain), not its own separate cap. Checked every
+    /// frame regardless of Mode, same as the death-reset toggle. Fires
+    /// on every HP tick while in combat, so a fast-ticking DoT or
+    /// sustained AoE can trigger it repeatedly in quick succession -
+    /// keep DamageTakenScaleIncrease's magnitude small unless that's the
+    /// effect you want. On by default. A separate, dedicated "Damage
+    /// Taken Reduces Scale" toggle existed here previously but was
+    /// removed per request in favor of this single bidirectional
+    /// toggle, with GcdReducesScaleEnabled below still the primary way
+    /// to fight the scale back down.
     /// </summary>
     public bool IncreaseScaleOnDamageTaken { get; set; } = true;
 
-    /// <summary>Amount added to the current job scale per in-combat HP-decrease event when IncreaseScaleOnDamageTaken is on.</summary>
+    /// <summary>Amount added to the current job scale per in-combat HP-decrease event when IncreaseScaleOnDamageTaken is on. Positive raises scale, negative lowers it.</summary>
     public float DamageTakenScaleIncrease { get; set; } = 0.01f;
 
     /// <summary>
@@ -444,21 +450,24 @@ public sealed class Configuration : IPluginConfiguration
     /// plain rising edge of those flags alone, since an earlier version
     /// found that back-to-back jumps performed immediately upon landing
     /// don't reliably toggle the flag back to false in between, causing
-    /// the second jump to go undetected) increases the current
-    /// job scale by JumpScaleIncreaseAmount, capped at JobUpperLimitScale
-    /// (Maximum Scaling In Combat) always - unlike
-    /// IncreaseScaleOnDamageTaken, this doesn't switch to
-    /// JobBaselineScale out of combat, per request. Checked every frame
-    /// regardless of Mode, same as the damage-taken/death-reset
-    /// toggles, and unlike the damage-taken toggles, not restricted to
-    /// combat - jumping isn't inherently combat-related the way taking
-    /// damage is. Rate-limited by its own dedicated
+    /// the second jump to go undetected) adjusts the current job scale
+    /// by JumpScaleIncreaseAmount (added, so a positive value raises
+    /// scale and a negative value lowers it - "Jumping Affects Scale" in
+    /// the settings window, previously "Increases" back when only the
+    /// positive direction was supported), clamped between
+    /// JobCombatFloorScale and JobUpperLimitScale (Maximum Scaling In
+    /// Combat) always - unlike IncreaseScaleOnDamageTaken, this doesn't
+    /// switch to JobBaselineScale out of combat, per request. Checked
+    /// every frame regardless of Mode, same as the damage-taken/
+    /// death-reset toggles, and unlike the damage-taken toggle, not
+    /// restricted to combat - jumping isn't inherently combat-related
+    /// the way taking damage is. Rate-limited by its own dedicated
     /// JumpTriggerCooldownSeconds below, separate from
-    /// DamageTriggerCooldownSeconds. Off by default.
+    /// DamageTriggerCooldownSeconds. On by default.
     /// </summary>
     public bool JumpIncreasesScaleEnabled { get; set; } = true;
 
-    /// <summary>Amount added to the current job scale per jump when JumpIncreasesScaleEnabled is on.</summary>
+    /// <summary>Amount added to the current job scale per jump when JumpIncreasesScaleEnabled is on. Positive raises scale, negative lowers it.</summary>
     public float JumpScaleIncreaseAmount { get; set; } = 0.01f;
 
     /// <summary>
@@ -519,6 +528,25 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>How many seconds the actual fade transition takes, in either direction. 0 means an instant snap rather than an eased fade. 1 second by default.</summary>
     public float HudFadeDurationSeconds { get; set; } = 0.2f;
+
+    /// <summary>
+    /// If true, the applied scale reaching or exceeding
+    /// HudShowAboveScaleThreshold continuously wakes the HUD gauge from
+    /// its idle fade - same WakeFromIdle() mechanism as an ability use
+    /// or the /attention emote, just driven by the scale value itself
+    /// instead of a discrete event. Checked every frame in Plugin.cs
+    /// alongside the /attention and /guard wake-checks, so as long as
+    /// scale stays at or above the threshold the gauge stays visible
+    /// (or fades back in if it had already faded); once scale drops
+    /// back below, the normal idle timer resumes counting down from
+    /// there like any other wake. Off by default - the whole idle-fade
+    /// feature exists to reduce clutter, so this only kicks in once
+    /// explicitly turned on.
+    /// </summary>
+    public bool HudShowAboveScaleEnabled { get; set; } = false;
+
+    /// <summary>The applied-scale value at or above which HudShowAboveScaleEnabled keeps the HUD gauge awake. Independent of every other scale threshold in this file (Guard, threshold-effect ramp, etc.) - purely for HUD visibility. 1.20 by default.</summary>
+    public float HudShowAboveScaleThreshold { get; set; } = 1.20f;
 
     /// <summary>
     /// If true, the HUD gauge is hidden entirely while out of combat,

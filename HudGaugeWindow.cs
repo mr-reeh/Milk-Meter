@@ -102,8 +102,14 @@ namespace MilkMeter;
 /// shakedrink-boosted growth, and the dedicated /attention emote (which
 /// exists specifically to "check the gauge's status" without needing to
 /// use an ability or take damage first). Passive growth by itself is
-/// deliberately NOT one of these - see Plugin.cs for exactly where each
-/// WakeFromIdle() call lives.
+/// deliberately NOT one of these BY DEFAULT - see Plugin.cs for exactly
+/// where each WakeFromIdle() call lives. The one opt-in exception is
+/// HudShowAboveScaleEnabled: once turned on, the applied scale value
+/// itself (regardless of what's driving it, passive growth included)
+/// counts as activity for as long as it's at or above
+/// HudShowAboveScaleThreshold - a deliberate choice to let the scale
+/// value's own magnitude double as a wake condition, off by default
+/// same as every other opt-in HUD behavior in this file.
 ///
 /// Drawing note carried over from the original bar version: this reads
 /// its own SetNextWindowPos/SetNextWindowSize values directly for all
@@ -206,7 +212,9 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
     /// Trigger() itself, and separately by Plugin.cs for events that
     /// should count as "activity" without necessarily firing a particle
     /// burst (the increase-variant events, active shakedrink-boosted
-    /// growth, and the dedicated /attention emote).
+    /// growth, the dedicated /attention/guard emotes, and - if
+    /// HudShowAboveScaleEnabled is on - the applied scale being at or
+    /// above HudShowAboveScaleThreshold).
     /// </summary>
     public void WakeFromIdle() => lastValueChangeTime = NowSeconds();
 
