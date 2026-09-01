@@ -1065,7 +1065,12 @@ public sealed class Plugin : IDalamudPlugin
                     // (whether from a single ability left there, or
                     // several abilities' multipliers netting to zero in
                     // the same tick) is a no-op and stays silent, same
-                    // as the negative case below.
+                    // as the negative case below. Per a later request,
+                    // it doesn't even wake the gauge from idle anymore
+                    // either - a multiplier at 0.00 genuinely does
+                    // nothing to the scale, so it shouldn't count as
+                    // "activity" for idle-fade purposes any more than it
+                    // does for the particle burst.
                     if (delta > 0f)
                     {
                         // Ability-use reductions get a more prominent
@@ -1074,10 +1079,6 @@ public sealed class Plugin : IDalamudPlugin
                         // here.
                         const float abilityUseBurstIntensity = 1.8f;
                         hudGauge.Trigger(abilityUseBurstIntensity);
-                    }
-                    else
-                    {
-                        hudGauge.WakeFromIdle();
                     }
                 }
                 else
