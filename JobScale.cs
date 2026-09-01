@@ -70,11 +70,13 @@ public sealed class JobBuffTracker
     // watched differs. Extend to support more jobs.
     private static readonly Dictionary<string, string[]> TrackedAbilityNames = new()
     {
-        // Tanks - Provoke, plus each job's own extra tracked abilities
-        ["PLD"] = ["Provoke"],
-        ["WAR"] = ["Provoke", "Equilibrium"],
-        ["DRK"] = ["Provoke"],
-        ["GNB"] = ["Provoke"],
+        // Tanks - Provoke, plus each job's own extra tracked abilities.
+        // Reprisal is also a tank role action (shared by all four, same
+        // as Provoke), 60s recast - added to every tank job's list.
+        ["PLD"] = ["Provoke", "Reprisal"],
+        ["WAR"] = ["Provoke", "Equilibrium", "Reprisal"],
+        ["DRK"] = ["Provoke", "Reprisal"],
+        ["GNB"] = ["Provoke", "Reprisal"],
 
         // Melee & physical ranged DPS - Second Wind
         ["MNK"] = ["Second Wind"],
@@ -118,8 +120,9 @@ public sealed class JobBuffTracker
 
     /// <summary>
     /// The tracked ability name(s) for the current job, or null if the
-    /// current job isn't tracked (or no player yet). Almost always one
-    /// name; Warrior has two.
+    /// current job isn't tracked (or no player yet). Non-tanks have one
+    /// name; tanks have two (Provoke + Reprisal) or, for Warrior, three
+    /// (also Equilibrium).
     /// </summary>
     public string[]? GetTrackedAbilityNames()
     {
@@ -491,10 +494,11 @@ public static class JobScale
     /// The user-configurable overuse-bonus multiplier for a given ability
     /// name - fully in the user's hands via the settings window, not
     /// derived automatically. Defaults match each ability's real cooldown
-    /// relative to Provoke's 30s baseline (1x/2x/2x/4x). Any ability name
-    /// not one of the four below (shouldn't currently happen, since these
-    /// are the only ones in JobBuffTracker's TrackedAbilityNames) falls
-    /// back to 1x.
+    /// relative to Provoke's 30s baseline (1x/2x/2x/2x/4x - Reprisal's
+    /// 60s recast puts it alongside Equilibrium/Lucid Dreaming at 2x).
+    /// Any ability name not one of the five below (shouldn't currently
+    /// happen, since these are the only ones in JobBuffTracker's
+    /// TrackedAbilityNames) falls back to 1x.
     /// </summary>
     public static float GetOveruseMultiplier(string abilityName, Configuration config) => abilityName switch
     {
@@ -502,6 +506,7 @@ public static class JobScale
         "Equilibrium" => config.EquilibriumMultiplier,
         "Lucid Dreaming" => config.LucidDreamingMultiplier,
         "Second Wind" => config.SecondWindMultiplier,
+        "Reprisal" => config.ReprisalMultiplier,
         _ => 1f,
     };
 }

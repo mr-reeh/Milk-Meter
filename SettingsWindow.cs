@@ -223,10 +223,11 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
             ImGui.TextDisabled("The PRIMARY mechanic for fighting the scale back down - fires once per " +
-                "GCD (spell or weaponskill), both in AND out of combat. Positive values lower scale " +
-                "(and play the milk-droplet burst, same as any other reduction), negative values raise " +
-                "it instead (just wakes the gauge from idle, no burst) - either direction is clamped " +
-                "between Minimum Scaling and Maximum Scaling (In Combat), always. Recast group default " +
+                "GCD (spell or weaponskill), both in AND out of combat. Positive values raise scale " +
+                "(just wakes the gauge from idle, no burst), negative values lower it instead " +
+                "(and play the milk-droplet burst, same as any other reduction) - either direction is " +
+                "clamped between Minimum Scaling and Maximum Scaling (In Combat), always. Negative by " +
+                "default so this still fights the scale down out of the box. Recast group default " +
                 "(57) confirmed correct via /milkmeter gcddebug's active-group scan - community " +
                 "documentation had suggested 58, which was wrong on this client.");
 
@@ -249,7 +250,7 @@ public sealed class SettingsWindow(
                 "applies.");
 
             var triggerCooldown = configuration.DamageTriggerCooldownSeconds;
-            if (ImGui.SliderFloat("Damage Trigger Cooldown (Seconds)", ref triggerCooldown, 0.0f, 5.0f, "%.1f"))
+            if (ImGui.SliderFloat("Damage Trigger Cooldown (Seconds)", ref triggerCooldown, 0.0f, 60.0f, "%.1f"))
             {
                 configuration.DamageTriggerCooldownSeconds = triggerCooldown;
                 configuration.Save();
@@ -472,6 +473,13 @@ public sealed class SettingsWindow(
             if (ImGui.SliderFloat("Second Wind", ref secondWindMultiplier, -5.0f, 5.0f, "%.2f"))
             {
                 configuration.SecondWindMultiplier = secondWindMultiplier;
+                configuration.Save();
+            }
+
+            var reprisalMultiplier = configuration.ReprisalMultiplier;
+            if (ImGui.SliderFloat("Reprisal", ref reprisalMultiplier, -5.0f, 5.0f, "%.2f"))
+            {
+                configuration.ReprisalMultiplier = reprisalMultiplier;
                 configuration.Save();
             }
 

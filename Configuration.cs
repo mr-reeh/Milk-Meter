@@ -150,6 +150,9 @@ public sealed class Configuration : IPluginConfiguration
 
     public float SecondWindMultiplier { get; set; } = -1.0f;
 
+    /// <summary>Overuse-bonus multiplier for Reprisal (all four tank jobs - see TrackedAbilityNames). 60s recast, same 2x-Provoke baseline as Equilibrium/Lucid Dreaming. See JobScale.GetOveruseMultiplier.</summary>
+    public float ReprisalMultiplier { get; set; } = 2.0f;
+
     /// <summary>
     /// Growth ceiling while in combat - the highest simply existing over
     /// time can grow the current job scale to while fighting. Using a
@@ -420,15 +423,18 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// If true, every GCD invocation (a spell or weaponskill - detected
     /// as the rising edge of the shared GCD recast group going on
-    /// cooldown, see JobBuffTracker.GetGcdCooldownState) subtracts
-    /// GcdScaleReductionAmount from the current job scale (so a positive
-    /// amount lowers scale and a negative amount raises it - "GCD
-    /// Affects Scale" in the settings window, previously "Reduces Scale"
-    /// back when only the lowering direction was supported), clamped
-    /// between JobCombatFloorScale and JobUpperLimitScale just like
-    /// ability-use reductions. Unlike the damage-taken toggle above,
-    /// this fires both in AND out of combat - a GCD is a GCD either way,
-    /// so unlike the damage-taken toggle's ceiling it doesn't switch to
+    /// cooldown, see JobBuffTracker.GetGcdCooldownState) adds
+    /// GcdScaleReductionAmount to the current job scale (so a positive
+    /// amount raises scale and a negative amount lowers it - "GCD
+    /// Affects Scale" in the settings window; the property name and its
+    /// negative-by-default value are both carried over from when this
+    /// only supported lowering and used subtraction instead, but the
+    /// sign convention now matches DamageTakenScaleIncrease/
+    /// JumpScaleIncreaseAmount exactly, per request), clamped between
+    /// JobCombatFloorScale and JobUpperLimitScale just like ability-use
+    /// reductions. Unlike the damage-taken toggle above, this fires both
+    /// in AND out of combat - a GCD is a GCD either way, so unlike the
+    /// damage-taken toggle's ceiling it doesn't switch to
     /// JobBaselineScale out of combat (same reasoning Jump's own ceiling
     /// uses). This is the PRIMARY mechanic for fighting the scale back
     /// down as it builds, per request - on by default, unlike every
@@ -436,8 +442,8 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool GcdReducesScaleEnabled { get; set; } = true;
 
-    /// <summary>Amount subtracted from the current job scale per GCD invocation when GcdReducesScaleEnabled is on. Positive lowers scale, negative raises it.</summary>
-    public float GcdScaleReductionAmount { get; set; } = 0.02f;
+    /// <summary>Amount added to the current job scale per GCD invocation when GcdReducesScaleEnabled is on. Positive raises scale, negative lowers it - negative by default so the PRIMARY mechanic still fights scale down out of the box.</summary>
+    public float GcdScaleReductionAmount { get; set; } = -0.02f;
 
     /// <summary>
     /// The FFXIVClientStructs recast group number shared by every GCD

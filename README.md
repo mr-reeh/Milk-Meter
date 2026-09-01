@@ -6,9 +6,10 @@ triggers instead of picking one:
 
 - **Food mode** (default): scale tracks your Well Fed (food) buff timer.
 - **Mana mode** (original ManaMune behavior): scale tracks current MP.
-- **Job mode**: same mechanic for every tracked job. Provoke for tanks (Warrior additionally
-  tracks Equilibrium, either one counts); melee/physical ranged DPS track Second Wind;
-  healers/casters track Lucid Dreaming - any one of a job's tracked abilities firing counts. Using
+- **Job mode**: same mechanic for every tracked job. Provoke and Reprisal for every tank
+  (Warrior additionally tracks Equilibrium, any one counts); melee/physical ranged DPS track
+  Second Wind; healers/casters track Lucid Dreaming - any one of a job's tracked abilities firing
+  counts. Using
   one **subtracts** a "Base Reduction Per Action" from your current scale, multiplied by that
   specific ability's own fully user-configurable multiplier (-5 to 5; defaults match each ability's
   real cooldown relative to Provoke's 30s baseline - adjust any of them freely in the settings
@@ -48,10 +49,10 @@ triggers instead of picking one:
   immediately sets scale to Minimum Scaling and **freezes** it there - no Passive Scale Gen at all -
   until you're revived, then it resumes normally (off by default).
   "GCD Affects Scale" is the PRIMARY mechanic for fighting the scale back down as it builds - on
-  by default, unlike every other scale-modifying toggle here - subtracting a configurable amount
-  per GCD invocation (any spell or weaponskill), clamped between Minimum Scaling and Maximum
-  Scaling (In Combat), both in AND out of combat. A negative amount raises scale instead of
-  lowering it. Detected via `JobBuffTracker.GetGcdCooldownState`, built on the same
+  by default, unlike every other scale-modifying toggle here - adding a configurable amount
+  (negative by default) per GCD invocation (any spell or weaponskill), clamped between Minimum
+  Scaling and Maximum Scaling (In Combat), both in AND out of combat. A positive amount raises
+  scale instead of lowering it. Detected via `JobBuffTracker.GetGcdCooldownState`, built on the same
   `ActionManager.Instance()->GetRecastGroupDetail()` mechanism already proven elsewhere in this
   file for per-ability tracking - the recast group number itself (`GcdRecastGroup`, default 57)
   was confirmed empirically via `/milkmeter gcddebug`'s active-group scan
@@ -70,7 +71,7 @@ triggers instead of picking one:
   bidirectional toggle, with the GCD mechanic above still the primary way to fight the scale down).
   Clamped between Minimum Scaling and whichever Maximum Scaling
   currently applies rather than a fixed value. This trigger is rate-limited by a configurable
-  cooldown (0-5 seconds, 0 = no limit), so a fast-ticking DoT can't fire the effect on every
+  cooldown (0-60 seconds, 0 = no limit), so a fast-ticking DoT can't fire the effect on every
   single tick. Also optionally, "Jumping Affects Scale" (on by default) adds a configurable
   amount per jump (positive raises, negative lowers) - detected as a fresh upward vertical-velocity impulse (`JumpVelocityThreshold`,
   a guessed starting value tunable via `/milkmeter jumpdebug`) while
@@ -311,7 +312,7 @@ disappears, which always pushes immediately regardless of the throttle.
 - `ManaScale.cs` — the mana-based source (`ManaTracker` + `ManaScale`, mirrors the
   original ManaMune).
 - `JobScale.cs` — the job-relevant source (`JobBuffTracker` + `JobScale`). Every tracked job
-  (`TrackedAbilityNames` - Provoke/Equilibrium/Second Wind/Lucid Dreaming) uses the same mechanic:
+  (`TrackedAbilityNames` - Provoke/Equilibrium/Second Wind/Lucid Dreaming/Reprisal) uses the same mechanic:
   each ability's cooldown is read via FFXIVClientStructs' `ActionManager` (`GetCooldownState()` -
   requires the `FFXIVClientStructs` reference and `AllowUnsafeBlocks` in the `.csproj`) purely as
   a "was it just used" pulse, which Plugin.cs uses to **subtract** `JobOveruseBonus` (scaled

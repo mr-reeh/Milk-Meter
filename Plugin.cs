@@ -704,12 +704,15 @@ public sealed class Plugin : IDalamudPlugin
         // agnostic AND combat-agnostic (unlike the damage-taken check
         // above) - a GCD is a GCD whether in combat or not, per request.
         // Clamped between JobCombatFloorScale and JobUpperLimitScale,
-        // not a plain Max, since GcdScaleReductionAmount can now be
-        // negative (GCD Affects Scale, not just "Reduces") - a negative
-        // amount raises scale instead, which needs the UPPER bound
-        // enforced too. Only fires the particle burst those other
+        // since GcdScaleReductionAmount can be either sign (GCD
+        // Affects Scale, not just "Reduces") - added directly (positive
+        // raises scale, negative lowers it), matching the exact same
+        // sign convention DamageTakenScaleIncrease/JumpScaleIncreaseAmount
+        // use, rather than the subtraction this originally used before
+        // that convention was standardized across all three toggles per
+        // request. Only fires the particle burst those other
         // reductions get when it's actually lowering the scale (a
-        // positive amount) - a negative amount just wakes the gauge
+        // negative amount) - a positive amount just wakes the gauge
         // from idle instead, same as the raising direction of every
         // other bidirectional toggle.
         if (Configuration.GcdReducesScaleEnabled)
@@ -722,11 +725,11 @@ public sealed class Plugin : IDalamudPlugin
             if (risingEdge || elapsedReset)
             {
                 jobCurrentScale = System.Math.Clamp(
-                    jobCurrentScale - Configuration.GcdScaleReductionAmount,
+                    jobCurrentScale + Configuration.GcdScaleReductionAmount,
                     Configuration.JobCombatFloorScale,
                     Configuration.JobUpperLimitScale);
 
-                if (Configuration.GcdScaleReductionAmount > 0f)
+                if (Configuration.GcdScaleReductionAmount < 0f)
                     hudGauge.Trigger();
                 else
                     hudGauge.WakeFromIdle();
@@ -989,12 +992,13 @@ public sealed class Plugin : IDalamudPlugin
             var inCombat = Condition[ConditionFlag.InCombat];
 
             // A job can have more than one tracked ability (Warrior has
-            // both Provoke and Equilibrium) - either one being used
+            // Provoke, Equilibrium, AND Reprisal; every other tank has
+            // Provoke and Reprisal) - either one being used
             // applies its effect, so check every tracked name's rising
             // edge independently and accumulate each fired ability's own
             // configurable multiplier (see JobScale.GetOveruseMultiplier
-            // and the Provoke/Equilibrium/Lucid Dreaming/Second Wind
-            // sliders in the settings window - these are fully in the
+            // and the Provoke/Equilibrium/Lucid Dreaming/Second Wind/
+            // Reprisal sliders in the settings window - these are fully in the
             // user's hands, not automatically balanced, and can now be
             // negative to flip an ability's effect from a reduction into
             // an increase). Using two abilities in the same tick stacks
