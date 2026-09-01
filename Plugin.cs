@@ -276,7 +276,7 @@ public sealed class Plugin : IDalamudPlugin
             () => manaTracker.GetManaFraction(),
             jobTracker.GetTrackedAbilityDisplayName,
             () => (Condition[ConditionFlag.InCombat], jobCurrentScale));
-        hudGauge = new HudGaugeWindow(Configuration, GetAppliedScale, () => Condition[ConditionFlag.InCombat]);
+        hudGauge = new HudGaugeWindow(Configuration, GetAppliedScale, () => Condition[ConditionFlag.InCombat], ResetScaleToBaselineForPause);
         heartbeatSoundPlayer = new HeartbeatSoundPlayer(Log);
         moanSoundPlayer = new MoanSoundPlayer(Log);
         burpSoundPlayer = new BurpSoundPlayer(Log);
@@ -1262,6 +1262,30 @@ public sealed class Plugin : IDalamudPlugin
 
     /// <summary>The actual scale currently pushed to Customize+ (post-animation), for the settings window's monitor.</summary>
     private float GetAppliedScale() => currentAppliedScale < 0f ? 1f : currentAppliedScale;
+
+    /// <summary>
+    /// Called by HudGaugeWindow the instant a click pauses scaling (not
+    /// when a click unpauses it) - per request, pausing via the gauge
+    /// always snaps scale to 1.0 rather than freezing wherever it
+    /// happened to be. Resets jobCurrentScale (the only mode with an
+    /// internally-tracked value to reset - Food/Mana modes compute
+    /// their target fresh from live external state every frame instead,
+    /// so there's nothing to reset there) AND currentAppliedScale
+    /// directly, then pushes to Customize+ immediately - the normal
+    /// per-frame update loop that would otherwise do this push is
+    /// itself skipped entirely while ScalingPaused is true (see its
+    /// early-return), so without this explicit push here the visual
+    /// bottle/Customize+ chest scale wouldn't actually reach 1.0 until
+    /// unpaused.
+    /// </summary>
+    private void ResetScaleToBaselineForPause()
+    {
+        jobCurrentScale = 1.0f;
+        currentAppliedScale = 1.0f;
+        customizePlus.SetChestScale(1.0f);
+        lastPushedScale = 1.0f;
+        lastPushTime = ImGuiNowSeconds();
+    }
 
     private static double ImGuiNowSeconds() =>
         System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;

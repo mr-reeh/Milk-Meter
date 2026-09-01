@@ -124,7 +124,7 @@ namespace MilkMeter;
 /// match the body), since it moves up and down as the fraction changes.
 /// Barely noticeable except right at 100% full.
 /// </summary>
-public sealed class HudGaugeWindow(Configuration configuration, Func<float> getAppliedScale, Func<bool> getInCombat)
+public sealed class HudGaugeWindow(Configuration configuration, Func<float> getAppliedScale, Func<bool> getInCombat, Action onPausedByClick)
 {
     // Base dimensions at HudScale = 1.0. All multiplied by
     // Configuration.HudScale when actually drawing. Matches the
@@ -291,6 +291,21 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
                 {
                     configuration.ScalingPaused = !configuration.ScalingPaused;
                     configuration.Save();
+
+                    // Only when the click just turned pausing ON (not
+                    // when it turned pausing back off) - per request,
+                    // pausing via the gauge always snaps scale to 1.0
+                    // rather than freezing wherever it happened to be.
+                    // Plugin.cs owns what "scale" actually means (which
+                    // internal field(s) to reset, and pushing the
+                    // change to Customize+ immediately despite the
+                    // per-frame update loop itself being skipped while
+                    // paused) - this window has no access to any of
+                    // that, so it's entirely delegated via this
+                    // callback rather than reaching into Plugin.cs
+                    // internals from here.
+                    if (configuration.ScalingPaused)
+                        onPausedByClick();
                 }
 
                 // Scales this window's font for the rest of the frame's text
