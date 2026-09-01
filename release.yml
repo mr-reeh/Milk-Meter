@@ -1,0 +1,60 @@
+name: Build and Release
+
+# Push a tag like "v0.2.0.0" to trigger this. It builds the plugin in
+# Release configuration, packages the .dll + .deps.json + manifest into
+# latest.zip, and attaches that to a new GitHub Release at that tag.
+#
+# The repo.json manifest's DownloadLinkInstall/Update/Testing all point
+# at ".../releases/latest/download/latest.zip" - that's a special GitHub
+# URL that always resolves to whatever asset named "latest.zip" is on
+# the most recent non-prerelease release, so nothing else needs updating
+# when you publish a new version - just tag and push.
+on:
+  push:
+    tags:
+      - "v*"
+
+  # Lets you manually trigger a build from the Actions tab without
+  # pushing a tag, useful for testing the workflow itself. Doesn't
+  # create a release - only tag pushes do that (see the "if" on the
+  # release step below).
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Download Dalamud
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile dalamud.zip
+          Expand-Archive -Path dalamud.zip -DestinationPath dalamud
+
+      - name: Build
+        shell: pwsh
+        env:
+          DALAMUD_HOME: ${{ github.workspace }}\dalamud
+        run: dotnet build --configuration Release MilkMeter.csproj
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "bin\Release\net10.0-windows"
+          Compress-Archive -Path "$out\MilkMeter.dll", "$out\MilkMeter.deps.json", "MilkMeter.json" -DestinationPath latest.zip
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: latest.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

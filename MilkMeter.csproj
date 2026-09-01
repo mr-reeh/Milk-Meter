@@ -1,0 +1,111 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>MilkMeter</RootNamespace>
+    <AssemblyName>MilkMeter</AssemblyName>
+    <Version>1.3.0.0</Version>
+    <!-- Required for JobScale.cs, which calls into FFXIVClientStructs'
+         ActionManager via raw pointers (RecastDetail*) to read job
+         ability cooldown timers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!--
+    Standard Dalamud plugin bootstrap. DALAMUD_HOME must point at a local
+    Dalamud dev install (same setup used for the original ManaMune) -
+    see https://dalamud.dev/plugin-development/how-plugins-work for the
+    usual XIVLauncher dev-mode instructions.
+  -->
+  <PropertyGroup>
+    <DalamudLibPath>$(DALAMUD_HOME)\</DalamudLibPath>
+    <DalamudLibPath Condition="$(DALAMUD_HOME) == ''">$(AppData)\XIVLauncher\addon\Hooks\dev\</DalamudLibPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Dalamud">
+      <HintPath>$(DalamudLibPath)Dalamud.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Lumina">
+      <HintPath>$(DalamudLibPath)Lumina.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Lumina.Excel">
+      <HintPath>$(DalamudLibPath)Lumina.Excel.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Dalamud.Bindings.ImGui">
+      <HintPath>$(DalamudLibPath)Dalamud.Bindings.ImGui.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="FFXIVClientStructs">
+      <HintPath>$(DalamudLibPath)FFXIVClientStructs.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Required alongside FFXIVClientStructs for EmoteLoopTracker.cs,
+         which reads the Character struct - Character carries the
+         [GenerateInterop] attribute, whose generated members (like the
+         CStringPointer field) depend on this separate runtime assembly. -->
+    <Reference Include="InteropGenerator.Runtime">
+      <HintPath>$(DalamudLibPath)InteropGenerator.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Required for HeartbeatSoundPlayer.cs's use of
+         System.Media.SoundPlayer - modern .NET (unlike the old .NET
+         Framework) doesn't bundle this Windows-only BCL type by
+         default under net-windows target frameworks anymore; it's type
+         -forwarded to this separate compatibility package instead,
+         which needs an explicit reference. Version matches this
+         project's net10.0-windows TFM (Microsoft publishes these in
+         lockstep with each .NET release). A NAudio-backed version
+         briefly replaced SoundPlayer to support continuous volume
+         ramping, but that requirement was dropped per request - this
+         Microsoft-published compatibility package is back in place of
+         NAudio, which has been removed entirely (nothing in the
+         codebase references it anymore). -->
+    <PackageReference Include="System.Windows.Extensions" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Looping heartbeat sound for the threshold-effect overlay
+         (ThresholdEffectOverlay.cs) - embedded directly into the
+         assembly rather than shipped as a separate file alongside the
+         DLL, so it can't go missing when the plugin is packaged/copied.
+         Converted from each originally-uploaded file to standard 16-bit
+         PCM WAV before embedding (the very first upload was Microsoft
+         ADPCM, a compressed format; a later replacement was 32-bit PCM)
+         - 16-bit PCM is the format SoundPlayer has actually been
+         confirmed to handle reliably here. Originally this single file
+         had a second sound (a moan) mixed directly into the same
+         waveform - split into two separate files per request, this one
+         re-uploaded as JUST the heartbeat. -->
+    <EmbeddedResource Include="heartbeat.wav" />
+
+    <!-- Looping moan sound for the threshold-effect overlay
+         (MoanSoundPlayer.cs / ThresholdEffectOverlay.cs) - previously
+         mixed together with the heartbeat sound in the single
+         heartbeat.wav file above; split out per request into its own
+         file, its own embedded resource, its own player class, and its
+         own independently configurable threshold
+         (ThresholdEffectMoanSoundThreshold), so either sound can be
+         tuned or disabled without affecting the other. Same 16-bit PCM
+         conversion requirement as heartbeat.wav/burp.wav above. -->
+    <EmbeddedResource Include="moan.wav" />
+
+    <!-- One-shot burp sound (BurpSoundPlayer.cs) played the instant the
+         Self Sucking Threshold fires "/attention motion". Same
+         embedding approach as heartbeat.wav, converted the same way
+         (originally 32-bit PCM, converted to 16-bit for SoundPlayer). -->
+    <EmbeddedResource Include="burp.wav" />
+  </ItemGroup>
+
+</Project>
