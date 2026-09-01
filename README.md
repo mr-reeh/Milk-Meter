@@ -55,3 +55,8 @@ visual/gameplay effect on your own client.
 
 Everything else - fine-tuning growth rates, per-action multipliers, HUD appearance,
 colors, sounds, and more - lives in the settings window itself.
+
+## 🤖 AI Assistance & Attribution
+This project is AI-assisted. 
+* **Core Coding & Architecture:** Assisted by [Anthropic's Claude](https://claude.ai) 
+
