@@ -667,11 +667,21 @@ public sealed class Plugin : IDalamudPlugin
                         jobCurrentScale + Configuration.DamageTakenScaleIncrease,
                         Configuration.JobCombatFloorScale,
                         ceiling);
-                    // No particle burst for the increase variant
-                    // (that's specifically an "empty the gauge"
-                    // payoff), but it's still genuine activity that
-                    // should wake the gauge from its idle fade.
-                    hudGauge.WakeFromIdle();
+
+                    // Particle burst only for the reducing case
+                    // (negative DamageTakenScaleIncrease) - matches
+                    // every other genuine reduction in this file
+                    // (GCD, ability-use, cackle-drain) getting the
+                    // same "emptying the gauge" payoff. The raising
+                    // case (positive amount, the original "Increases"
+                    // behavior) still just wakes the gauge from idle,
+                    // same as before - no burst, since that's
+                    // deliberately reserved for the empty-the-gauge
+                    // moment, not a fill-it-up one.
+                    if (Configuration.DamageTakenScaleIncrease < 0f)
+                        hudGauge.Trigger();
+                    else
+                        hudGauge.WakeFromIdle();
 
                     forceImmediate = true;
                     lastDamageTriggerTime = triggerNow;
@@ -693,8 +703,15 @@ public sealed class Plugin : IDalamudPlugin
         // never actually observe a false in between). Mode-
         // agnostic AND combat-agnostic (unlike the damage-taken check
         // above) - a GCD is a GCD whether in combat or not, per request.
-        // Floored at JobCombatFloorScale, same as every other reduction
-        // mechanic, and fires the same particle burst those get too.
+        // Clamped between JobCombatFloorScale and JobUpperLimitScale,
+        // not a plain Max, since GcdScaleReductionAmount can now be
+        // negative (GCD Affects Scale, not just "Reduces") - a negative
+        // amount raises scale instead, which needs the UPPER bound
+        // enforced too. Only fires the particle burst those other
+        // reductions get when it's actually lowering the scale (a
+        // positive amount) - a negative amount just wakes the gauge
+        // from idle instead, same as the raising direction of every
+        // other bidirectional toggle.
         if (Configuration.GcdReducesScaleEnabled)
         {
             var (gcdOnCooldown, gcdElapsed, _) = jobTracker.GetGcdCooldownState(Configuration.GcdRecastGroup);
@@ -704,10 +721,16 @@ public sealed class Plugin : IDalamudPlugin
 
             if (risingEdge || elapsedReset)
             {
-                jobCurrentScale = System.Math.Max(
+                jobCurrentScale = System.Math.Clamp(
                     jobCurrentScale - Configuration.GcdScaleReductionAmount,
-                    Configuration.JobCombatFloorScale);
-                hudGauge.Trigger();
+                    Configuration.JobCombatFloorScale,
+                    Configuration.JobUpperLimitScale);
+
+                if (Configuration.GcdScaleReductionAmount > 0f)
+                    hudGauge.Trigger();
+                else
+                    hudGauge.WakeFromIdle();
+
                 forceImmediate = true;
             }
 
@@ -759,7 +782,16 @@ public sealed class Plugin : IDalamudPlugin
                             jobCurrentScale + Configuration.JumpScaleIncreaseAmount,
                             Configuration.JobCombatFloorScale,
                             Configuration.JobUpperLimitScale);
-                        hudGauge.WakeFromIdle();
+
+                        // Particle burst only for the reducing case,
+                        // same reasoning as the damage-taken variant
+                        // above - jumping to raise scale just wakes
+                        // the gauge from idle like it always did.
+                        if (Configuration.JumpScaleIncreaseAmount < 0f)
+                            hudGauge.Trigger();
+                        else
+                            hudGauge.WakeFromIdle();
+
                         lastJumpTriggerTime = jumpTriggerNow;
                     }
 

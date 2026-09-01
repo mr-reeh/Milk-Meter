@@ -421,17 +421,22 @@ public sealed class Configuration : IPluginConfiguration
     /// If true, every GCD invocation (a spell or weaponskill - detected
     /// as the rising edge of the shared GCD recast group going on
     /// cooldown, see JobBuffTracker.GetGcdCooldownState) subtracts
-    /// GcdScaleReductionAmount from the current job scale, floored at
-    /// JobCombatFloorScale just like ability-use reductions. Unlike the
-    /// damage-taken toggles above, this fires both in AND out of combat
-    /// - a GCD is a GCD either way. This is the PRIMARY mechanic for
-    /// fighting the scale back down as it builds, per request - on by
-    /// default, unlike every other opt-in scale-modifying toggle in this
-    /// file.
+    /// GcdScaleReductionAmount from the current job scale (so a positive
+    /// amount lowers scale and a negative amount raises it - "GCD
+    /// Affects Scale" in the settings window, previously "Reduces Scale"
+    /// back when only the lowering direction was supported), clamped
+    /// between JobCombatFloorScale and JobUpperLimitScale just like
+    /// ability-use reductions. Unlike the damage-taken toggle above,
+    /// this fires both in AND out of combat - a GCD is a GCD either way,
+    /// so unlike the damage-taken toggle's ceiling it doesn't switch to
+    /// JobBaselineScale out of combat (same reasoning Jump's own ceiling
+    /// uses). This is the PRIMARY mechanic for fighting the scale back
+    /// down as it builds, per request - on by default, unlike every
+    /// other opt-in scale-modifying toggle in this file.
     /// </summary>
     public bool GcdReducesScaleEnabled { get; set; } = true;
 
-    /// <summary>Amount subtracted from the current job scale per GCD invocation when GcdReducesScaleEnabled is on.</summary>
+    /// <summary>Amount subtracted from the current job scale per GCD invocation when GcdReducesScaleEnabled is on. Positive lowers scale, negative raises it.</summary>
     public float GcdScaleReductionAmount { get; set; } = 0.02f;
 
     /// <summary>
@@ -500,12 +505,14 @@ public sealed class Configuration : IPluginConfiguration
     public float DamageTriggerCooldownSeconds { get; set; } = 0f;
 
     /// <summary>
-    /// If true, every genuine reduction of the job scale (a tracked
-    /// ability's own reduction, or a GCD-triggered reduction when
-    /// GcdReducesScaleEnabled is active) fires a brief burst of milk
-    /// droplet particles around the bottle - see HudGaugeWindow's local
-    /// MilkParticleBurst. Does NOT fire for growth, the increase
-    /// variants, or the death freeze/reset. On by default.
+    /// If true, every genuine reduction of the job scale fires a brief
+    /// burst of milk droplet particles around the bottle - a tracked
+    /// ability's own reduction, a GCD-triggered reduction when
+    /// GcdReducesScaleEnabled is active, or a negative-amount Damage
+    /// Taken/Jumping Affects Scale event - see HudGaugeWindow's local
+    /// MilkParticleBurst. Does NOT fire for growth, the raising
+    /// direction of any of the bidirectional "Affects Scale" toggles, or
+    /// the death freeze/reset. On by default.
     /// </summary>
     public bool ShowMilkBurstEffect { get; set; } = true;
 

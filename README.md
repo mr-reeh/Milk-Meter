@@ -47,10 +47,11 @@ triggers instead of picking one:
   Optionally, dying
   immediately sets scale to Minimum Scaling and **freezes** it there - no Passive Scale Gen at all -
   until you're revived, then it resumes normally (off by default).
-  "GCD Reduces Scale" is the PRIMARY mechanic for fighting the scale back down as it builds - on
+  "GCD Affects Scale" is the PRIMARY mechanic for fighting the scale back down as it builds - on
   by default, unlike every other scale-modifying toggle here - subtracting a configurable amount
-  per GCD invocation (any spell or weaponskill), floored at Minimum Scaling, both in AND out of
-  combat. Detected via `JobBuffTracker.GetGcdCooldownState`, built on the same
+  per GCD invocation (any spell or weaponskill), clamped between Minimum Scaling and Maximum
+  Scaling (In Combat), both in AND out of combat. A negative amount raises scale instead of
+  lowering it. Detected via `JobBuffTracker.GetGcdCooldownState`, built on the same
   `ActionManager.Instance()->GetRecastGroupDetail()` mechanism already proven elsewhere in this
   file for per-ability tracking - the recast group number itself (`GcdRecastGroup`, default 57)
   was confirmed empirically via `/milkmeter gcddebug`'s active-group scan
@@ -62,21 +63,23 @@ triggers instead of picking one:
   hard way, it was silently missing GCDs pressed immediately as the previous one came off
   cooldown. Also optionally, taking damage
   while in combat (any HP decrease, including DoT ticks; never triggers out of combat) can
-  **increase** scale by a
-  configurable amount - "Damage Taken Increases Scale", off by default (a mirror-image "reduces"
-  toggle existed here previously but was removed per request, in favor of the GCD mechanic above
-  as the primary way to fight the scale down). Capped at whichever Maximum Scaling
+  **raise or lower** scale by a
+  configurable amount - "Damage Taken Affects Scale" (a positive amount raises scale, a negative
+  amount lowers it), on by default (a separate, dedicated "reduces"
+  toggle existed here previously but was removed per request, in favor of this single
+  bidirectional toggle, with the GCD mechanic above still the primary way to fight the scale down).
+  Clamped between Minimum Scaling and whichever Maximum Scaling
   currently applies rather than a fixed value. This trigger is rate-limited by a configurable
   cooldown (0-5 seconds, 0 = no limit), so a fast-ticking DoT can't fire the effect on every
-  single tick. Also optionally, "Jumping Increases Scale" (off by default) adds a configurable
-  amount per jump - detected as a fresh upward vertical-velocity impulse (`JumpVelocityThreshold`,
+  single tick. Also optionally, "Jumping Affects Scale" (on by default) adds a configurable
+  amount per jump (positive raises, negative lowers) - detected as a fresh upward vertical-velocity impulse (`JumpVelocityThreshold`,
   a guessed starting value tunable via `/milkmeter jumpdebug`) while
   `ConditionFlag.Jumping` OR `ConditionFlag.Jumping61` (Dalamud's
   own API lists two separate flags both described as "jumping", so both are checked rather than
   guessing which one the game actually sets), counted once per jump rather than continuously while
-  airborne. Always capped at Maximum Scaling In Combat specifically (not context-dependent the way
-  the damage-taken increase variant is), and unlike the
-  damage-taken toggles, not restricted to combat - rate-limited by its own separate "Jump Trigger
+  airborne. Always clamped against Maximum Scaling In Combat specifically (not context-dependent the way
+  the damage-taken toggle is), and unlike the
+  damage-taken toggle, not restricted to combat - rate-limited by its own separate "Jump Trigger
   Cooldown", not shared with the damage-taken cooldown above.
 
 Switch between them at runtime with `/milkmeter mode food`, `mode mana`, or

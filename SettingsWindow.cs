@@ -203,14 +203,14 @@ public sealed class SettingsWindow(
                 "until you're revived, then resumes normally.");
 
             var gcdReducesScale = configuration.GcdReducesScaleEnabled;
-            if (ImGui.Checkbox("GCD Reduces Scale", ref gcdReducesScale))
+            if (ImGui.Checkbox("GCD Affects Scale", ref gcdReducesScale))
             {
                 configuration.GcdReducesScaleEnabled = gcdReducesScale;
                 configuration.Save();
             }
 
             var gcdReduction = configuration.GcdScaleReductionAmount;
-            if (ImGui.SliderFloat("GCD Scale Reduction Amount", ref gcdReduction, 0.00f, 0.25f, "%.3f"))
+            if (ImGui.SliderFloat("GCD Scale Amount", ref gcdReduction, -0.25f, 0.25f, "%.3f"))
             {
                 configuration.GcdScaleReductionAmount = gcdReduction;
                 configuration.Save();
@@ -223,10 +223,12 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
             ImGui.TextDisabled("The PRIMARY mechanic for fighting the scale back down - fires once per " +
-                "GCD (spell or weaponskill), both in AND out of combat, floored at Minimum Scaling " +
-                "(Always). Recast group default (57) confirmed correct via /milkmeter " +
-                "gcddebug's active-group scan - community documentation had suggested 58, which was " +
-                "wrong on this client.");
+                "GCD (spell or weaponskill), both in AND out of combat. Positive values lower scale " +
+                "(and play the milk-droplet burst, same as any other reduction), negative values raise " +
+                "it instead (just wakes the gauge from idle, no burst) - either direction is clamped " +
+                "between Minimum Scaling and Maximum Scaling (In Combat), always. Recast group default " +
+                "(57) confirmed correct via /milkmeter gcddebug's active-group scan - community " +
+                "documentation had suggested 58, which was wrong on this client.");
 
             var increaseOnDamage = configuration.IncreaseScaleOnDamageTaken;
             if (ImGui.Checkbox("Damage Taken Affects Scale", ref increaseOnDamage))
@@ -565,8 +567,8 @@ public sealed class SettingsWindow(
             configuration.Save();
         }
         ImGui.TextDisabled("A brief burst of droplets around the bottle every time the gauge is genuinely " +
-            "reduced - a tracked ability's own reduction, the damage-taken reduction, or the repeating " +
-            "burst while /cackle's drain is active.");
+            "reduced - a tracked ability's own reduction, a negative-amount Damage Taken/Jumping Affects " +
+            "Scale, or the repeating burst while /cackle's drain is active.");
 
         var hudFadeOnIdle = configuration.HudFadeOnIdleEnabled;
         if (ImGui.Checkbox("Fade Out When Idle", ref hudFadeOnIdle))
