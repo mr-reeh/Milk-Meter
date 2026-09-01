@@ -511,14 +511,17 @@ public sealed class Configuration : IPluginConfiguration
     public float DamageTriggerCooldownSeconds { get; set; } = 0f;
 
     /// <summary>
-    /// If true, every genuine reduction of the job scale fires a brief
-    /// burst of milk droplet particles around the bottle - a tracked
-    /// ability's own reduction, a GCD-triggered reduction when
-    /// GcdReducesScaleEnabled is active, or a negative-amount Damage
-    /// Taken/Jumping Affects Scale event - see HudGaugeWindow's local
-    /// MilkParticleBurst. Does NOT fire for growth, the raising
-    /// direction of any of the bidirectional "Affects Scale" toggles, or
-    /// the death freeze/reset. On by default.
+    /// If true, fires a brief burst of milk droplet particles around the
+    /// bottle - a tracked ability's own reduction (a STRICTLY positive
+    /// overuse multiplier only; a multiplier sitting exactly at 0.00 is
+    /// a no-op and stays silent, same as a negative one), a
+    /// GCD-triggered reduction when GcdReducesScaleEnabled is active, or
+    /// a negative-amount Damage Taken/Jumping Affects Scale event - see
+    /// HudGaugeWindow's local MilkParticleBurst. Does NOT fire for
+    /// passive growth, the raising direction of the
+    /// GCD/Damage-Taken/Jumping "Affects Scale" toggles, a
+    /// zero-or-negative ability multiplier, or the death freeze/reset.
+    /// On by default.
     /// </summary>
     public bool ShowMilkBurstEffect { get; set; } = true;
 

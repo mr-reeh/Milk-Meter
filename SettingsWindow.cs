@@ -487,7 +487,10 @@ public sealed class SettingsWindow(
                 "own multiplier above) from your current scale, stacking if you spam it - so overusing your " +
                 "job action can shrink size all the way down to Minimum Scaling. A negative multiplier flips " +
                 "that ability's effect into an INCREASE instead, capped at whichever Maximum Scaling currently " +
-                "applies rather than Minimum Scaling. Passive Scale Gen continuously grows scale back up over " +
+                "applies rather than Minimum Scaling - and only a STRICTLY positive multiplier plays the " +
+                "milk-droplet burst; a multiplier sitting at exactly 0.00 (a no-op) or a negative one (the " +
+                "increasing case) both stay silent. Passive Scale Gen continuously " +
+                "grows scale back up over " +
                 "time: toward Maximum Scaling (In Combat) while fighting, or only up to Maximum Scaling (Out " +
                 "of Combat) once out of combat - but only from BELOW that ceiling. Entering/leaving combat " +
                 "while already above the new ceiling does NOT pull you back down to it; size stays exactly " +

@@ -1059,11 +1059,26 @@ public sealed class Plugin : IDalamudPlugin
                     // (which applies universally now, not just in
                     // combat) rather than growing it up to a ceiling.
                     jobCurrentScale = System.Math.Max(jobCurrentScale - delta, Configuration.JobCombatFloorScale);
-                    // Ability-use reductions get a more prominent burst
-                    // than damage-taken ones - the "empty the gauge"
-                    // payoff moment is meant to feel bigger here.
-                    const float abilityUseBurstIntensity = 1.8f;
-                    hudGauge.Trigger(abilityUseBurstIntensity);
+
+                    // Burst only for a STRICTLY positive delta, per
+                    // request - a multiplier landing exactly at 0.00
+                    // (whether from a single ability left there, or
+                    // several abilities' multipliers netting to zero in
+                    // the same tick) is a no-op and stays silent, same
+                    // as the negative case below.
+                    if (delta > 0f)
+                    {
+                        // Ability-use reductions get a more prominent
+                        // burst than damage-taken ones - the "empty the
+                        // gauge" payoff moment is meant to feel bigger
+                        // here.
+                        const float abilityUseBurstIntensity = 1.8f;
+                        hudGauge.Trigger(abilityUseBurstIntensity);
+                    }
+                    else
+                    {
+                        hudGauge.WakeFromIdle();
+                    }
                 }
                 else
                 {
@@ -1076,9 +1091,11 @@ public sealed class Plugin : IDalamudPlugin
                     // negative-multiplier ability can push scale past
                     // Baseline even out of combat.
                     jobCurrentScale = System.Math.Min(jobCurrentScale - delta, Configuration.JobUpperLimitScale);
-                    // No particle burst here either (same reasoning as
-                    // the damage-taken increase variant), but still
-                    // genuine player-driven activity.
+                    // No particle burst here, per request - only a
+                    // strictly positive multiplier (the shrink case
+                    // above) fires it; growth just wakes the gauge from
+                    // idle like any other genuine player-driven
+                    // activity.
                     hudGauge.WakeFromIdle();
                 }
                 forceImmediate = true;
