@@ -38,15 +38,23 @@ namespace MilkMeter;
 /// NOTE: unlike an earlier version, the locked state is no longer fully
 /// click-through (NoInputs) - left-clicking the bottle while locked now
 /// toggles Configuration.ScalingPaused, freezing every mechanic that
-/// would modify or push chest scale. The gauge itself and its particle
+/// would modify or push chest scale (and, per a later request, always
+/// resetting scale to exactly 1.0 the instant a click pauses it - see
+/// Plugin.cs's ResetScaleToBaselineForPause and the onPausedByClick
+/// callback below). The gauge itself and its particle
 /// effects keep rendering as before (frozen at whatever scale was
 /// applied at the moment of pausing), but the threshold effect
 /// (vignette, glow, heartbeat sound) completely stops the instant it's
 /// paused, per request - see ThresholdEffectOverlay.Draw() and this
 /// class's own glow block below. This is a real trade-off: the window
 /// now intercepts clicks meant for the game if anything else happens
-/// to sit underneath it, which it never did before. A big, thick red X
-/// is drawn across the whole bottle whenever paused. UPDATED: the gauge
+/// to sit underneath it, which it never did before. UPDATED: the
+/// whole bottle renders at 10% opacity while paused (multiplied
+/// directly onto fadeAlpha, so idle-fade/hover-reveal still apply on
+/// top of it) - replaces an earlier big red X drawn across the bottle,
+/// which was itself a replacement for an even earlier plain "PAUSED"
+/// text label; see DrawBottle's own local alpha calculation for
+/// specifics. Also, the gauge
 /// is no longer forced fully visible for the entire time it's paused -
 /// per request, it now follows the same idle-fade rules as any other
 /// state, so a forgotten paused gauge doesn't sit on screen forever.
@@ -73,10 +81,14 @@ namespace MilkMeter;
 /// current fade state.
 ///
 /// UPDATED: hovering the mouse over the gauge always forces it fully
-/// visible, overriding the idle/combat fade (though not an instant
-/// snap - it still eases in over HudFadeDurationSeconds like any other
-/// fade-target change). This is what makes the paused case specifically
-/// (see below) actually usable: since Configuration.ScalingPaused no
+/// visible (fadeAlpha itself back to 1 - though while paused, the
+/// separate 10%-opacity multiplier described further below still
+/// applies on top of that, so "fully visible" while paused tops out at
+/// 10%, not 100%), overriding the idle/combat fade (though not an
+/// instant snap - it still eases in over HudFadeDurationSeconds like
+/// any other fade-target change). This is what makes the paused case
+/// specifically (see below) actually usable: since
+/// Configuration.ScalingPaused no
 /// longer forces the gauge visible outright, a paused-and-idled gauge
 /// fades out same as any other idle gauge - hovering over its (still
 /// perfectly clickable; alpha never affects hit-testing) last known
@@ -408,7 +420,18 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
         // window" problem the milk particle burst and radiating glow
         // effect elsewhere in this file already solved the same way.
         var foregroundDrawList = ImGui.GetForegroundDrawList();
-        var alpha = fadeAlpha;
+        // While paused, the whole bottle (outline, fill, ticks, label -
+        // everything drawn via the local Col() below) renders at 10%
+        // opacity instead of its usual fadeAlpha-only value - replaces
+        // the earlier big red X paused indicator per request, for
+        // something less visually loud. Multiplied directly onto
+        // fadeAlpha rather than replacing it outright, so the idle-fade
+        // and hover-reveal behavior described in the class doc comment
+        // still apply on top of this - a paused-and-hovered gauge still
+        // reaches full 10% (not the deeper idle-faded alpha it'd
+        // otherwise have), and a paused-and-idled gauge fades toward 0
+        // starting from that same 10% ceiling rather than from 100%.
+        var alpha = fadeAlpha * (configuration.ScalingPaused ? 0.10f : 1f);
         uint Col(float r, float g, float b, float a) => ImGui.GetColorU32(new Vector4(r, g, b, a * alpha));
 
         // Outline color for the whole bottle shape (nipple, cap, body) -
@@ -655,35 +678,6 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
             drawList.AddText(labelPos, white, label);
         }
 
-        // --- Paused indicator: a big, thick red X drawn diagonally
-        // across just the BODY (not the full nipple+cap+body window
-        // bounding box an earlier version used, which made the X look
-        // stretched out - the body alone is a more proportional shape
-        // for an X to span) whenever Configuration.ScalingPaused
-        // is true - replaced an earlier "PAUSED" text label per request,
-        // for something far more visually prominent. Each diagonal is
-        // drawn twice - a thicker black line first (as an outline/border,
-        // matching the outline-then-fill visual language already used
-        // elsewhere in this file for text and the bottle's own shapes),
-        // then a thinner red line on top. Both scale with HudScale, same
-        // as everything else about the bottle's own size. ---
-        if (configuration.ScalingPaused)
-        {
-            var xTopRight = new Vector2(bodyMax.X, bodyMin.Y);
-            var xBottomLeft = new Vector2(bodyMin.X, bodyMax.Y);
-
-            var xOutlineThickness = configuration.HudScale * 16f;
-            var xFillThickness = configuration.HudScale * 10f;
-
-            var xBlack = Col(0f, 0f, 0f, 1f);
-            var xRed = Col(0.85f, 0.05f, 0.05f, 1f);
-
-            drawList.AddLine(bodyMin, bodyMax, xBlack, xOutlineThickness);
-            drawList.AddLine(xTopRight, xBottomLeft, xBlack, xOutlineThickness);
-
-            drawList.AddLine(bodyMin, bodyMax, xRed, xFillThickness);
-            drawList.AddLine(xTopRight, xBottomLeft, xRed, xFillThickness);
-        }
     }
 
     /// <summary>

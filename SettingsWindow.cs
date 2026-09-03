@@ -51,9 +51,10 @@ public sealed class SettingsWindow(
             configuration.ScalingPaused = scalingPaused;
             configuration.Save();
         }
-        ImGui.TextDisabled("Freezes every mechanic that would modify or push chest scale, while " +
-            "leaving the HUD gauge and its particle effects still visible (with a big red X drawn " +
-            "over it) - unlike unchecking Enabled above, which hides the gauge entirely. The " +
+        ImGui.TextDisabled("Freezes every mechanic that would modify or push chest scale (and " +
+            "resets scale to exactly 1.0 the instant it's paused), while " +
+            "leaving the HUD gauge and its particle effects still visible, dimmed to 10% opacity " +
+            "- unlike unchecking Enabled above, which hides the gauge entirely. The " +
             "threshold effect (vignette/glow/heartbeat) completely stops while paused instead of " +
             "continuing on the frozen value. Also toggleable by left-clicking the HUD gauge itself " +
             "while it's locked in place.");

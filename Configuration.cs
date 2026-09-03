@@ -45,10 +45,12 @@ public sealed class Configuration : IPluginConfiguration
     /// damage-taken, jumping, /cackle/guard, death-reset, the
     /// ease-toward-target animation, and the Customize+ push itself.
     /// Unlike Enabled above, this deliberately leaves the HUD gauge and
-    /// its particle effects still rendering (frozen at whatever scale
-    /// was applied at the moment of pausing, with a big red X drawn
-    /// over the bottle, and the gauge forced fully visible bypassing
-    /// its own idle-fade) - the point is to freeze scaling in place
+    /// its particle effects still rendering, just dimmed to 10% opacity
+    /// (frozen at exactly 1.0, since pausing via a HUD click always
+    /// resets scale first - see Plugin.ResetScaleToBaselineForPause)
+    /// and following the same idle-fade/hover-reveal rules as any other
+    /// state rather than being forced fully visible - the point is to
+    /// freeze scaling in place
     /// while keeping the plugin's visible presence intact, not to hide
     /// it. The threshold effect (vignette/glow/heartbeat sound) is the
     /// one exception - it completely stops the instant this is true,

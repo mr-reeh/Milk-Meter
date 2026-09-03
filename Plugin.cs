@@ -579,8 +579,10 @@ public sealed class Plugin : IDalamudPlugin
         // left-clicking the HUD gauge itself (see HudGaugeWindow.Draw())
         // or the settings window checkbox - unlike Configuration.Enabled,
         // this deliberately leaves the HUD gauge and its particle
-        // effects still rendering (frozen at whatever value scale was
-        // at when paused, with a big red X drawn over the bottle),
+        // effects still rendering (frozen at exactly 1.0, since a
+        // click-triggered pause now always resets scale first - see
+        // ResetScaleToBaselineForPause below - and dimmed to 10%
+        // opacity rather than drawing a red X over it),
         // rather than disabling the plugin's visible presence entirely.
         // The threshold effect (vignette/glow/heartbeat sound) is the
         // one exception - it completely stops the instant this is true,
