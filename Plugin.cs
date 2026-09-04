@@ -143,16 +143,16 @@ public sealed class Plugin : IDalamudPlugin
     private float? lastGcdElapsed;
 
     // Repeats the milk burst (both screen-wide and bottle-local) once
-    // per second for as long as /cackle's drain is actively running -
+    // per second for as long as /dazed's drain is actively running -
     // -1 sentinel means "never fired yet", so the very first tick of an
     // active drain fires immediately rather than waiting out the first
     // interval.
-    private const double CackleBurstIntervalSeconds = 1.0;
-    private double lastCackleBurstTime = -1d;
+    private const double DazedBurstIntervalSeconds = 1.0;
+    private double lastDazedBurstTime = -1d;
 
-    // Mirror of CackleBurstIntervalSeconds/lastCackleBurstTime for
+    // Mirror of DazedBurstIntervalSeconds/lastDazedBurstTime for
     // /water's own drain (Breast Feeding Drain) - a fully independent
-    // repeating-burst timer, not shared with Cackle's, since the two
+    // repeating-burst timer, not shared with Dazed's, since the two
     // drains are mutually exclusive anyway (only one looping emote can
     // be active at once) but are otherwise entirely separate features.
     private const double WaterBurstIntervalSeconds = 1.0;
@@ -160,25 +160,25 @@ public sealed class Plugin : IDalamudPlugin
 
     // Falling-edge tracker for the Self Sucking auto-attention-swap's
     // burp sound - true once scale has been observed at/below
-    // CackleDrainFloorScale, reset to false the moment it's back above
-    // (or /cackle stops being active). The burp fires only on the
+    // DazedDrainFloorScale, reset to false the moment it's back above
+    // (or /dazed stops being active). The burp fires only on the
     // transition into "at/below the floor," not on every tick it stays
     // there.
-    private bool cackleAtOrBelowFloorLastCheck;
+    private bool dazedAtOrBelowFloorLastCheck;
 
     // Timestamp of the most recent tick scale was observed strictly
-    // above CackleDrainFloorScale - tracked unconditionally every tick,
-    // regardless of Mode or whether /cackle is active, since scale can
+    // above DazedDrainFloorScale - tracked unconditionally every tick,
+    // regardless of Mode or whether /dazed is active, since scale can
     // be pushed above the floor by anything (passive growth, ability
-    // use, etc.), not just /cackle stopping. Used by the burp trigger
+    // use, etc.), not just /dazed stopping. Used by the burp trigger
     // below to distinguish "scale just NOW fell from above the floor"
     // (burp should play) from "scale was ALREADY at/below the floor
-    // when /cackle started" (burp should NOT play) - a plain single-tick
+    // when /dazed started" (burp should NOT play) - a plain single-tick
     // falling-edge check alone couldn't tell these apart, since
-    // cackleAtOrBelowFloorLastCheck resets to false every time /cackle
-    // stops being active, so starting /cackle while already at/below the
+    // dazedAtOrBelowFloorLastCheck resets to false every time /dazed
+    // stops being active, so starting /dazed while already at/below the
     // floor looked identical to a genuine fresh drop.
-    private double lastAboveCackleDrainFloorTime = -1d;
+    private double lastAboveDazedDrainFloorTime = -1d;
 
     // Vertical-velocity-based jump detection - replaced an earlier
     // rising-edge check on ConditionFlag.Jumping/Jumping61 alone, which
@@ -206,14 +206,14 @@ public sealed class Plugin : IDalamudPlugin
     private bool jumpCountedForCurrentArc;
 
     // Periodic re-send timer for the /attention swap itself (once per
-    // second, matching CackleAttentionSwapIntervalSeconds below) - -1
+    // second, matching DazedAttentionSwapIntervalSeconds below) - -1
     // sentinel means "never sent yet", so the first tick the floor is
     // reached fires immediately rather than waiting out the first
     // interval. Repeats for as long as the conditions hold, per
     // request, rather than firing just once - see the trigger block's
     // own comment for why.
-    private const double CackleAttentionSwapIntervalSeconds = 1.0;
-    private double lastCackleAttentionSwapTime = -1d;
+    private const double DazedAttentionSwapIntervalSeconds = 1.0;
+    private double lastDazedAttentionSwapTime = -1d;
 
     // Scheduled burp playback time (see SelfSuckingBurpDelaySeconds) -
     // null means nothing is pending. Checked every tick regardless of
@@ -224,7 +224,7 @@ public sealed class Plugin : IDalamudPlugin
     private double? pendingBurpPlayTime;
 
     // Periodic re-trigger timer for the guard auto-trigger (once per
-    // second, matching CackleBurstIntervalSeconds's own established
+    // second, matching DazedBurstIntervalSeconds's own established
     // pattern below) - -1 sentinel means "never fired yet", so the very
     // first tick where conditions are met fires immediately rather than
     // waiting out the first interval. No longer a rising-edge flag (an
@@ -299,8 +299,8 @@ public sealed class Plugin : IDalamudPlugin
                 + "'dumpprofile' prints your active Customize+ profile's raw JSON to /xllog. "
                 + "'jobdebug' prints diagnostic info for Job Buff mode's ability/cooldown lookup. "
                 + "'emotedebug' prints your current Character.Mode/ModeParam - use while performing "
-                + "/shakedrink, /cackle, /water, /attention, or /guard to find the ShakeDrinkEmoteModeParam/"
-                + "CackleEmoteModeParam/WaterEmoteModeParam/AttentionEmoteModeParam/GuardEmoteModeParam values for precise "
+                + "/shakedrink, /dazed, /water, /attention, or /guard to find the ShakeDrinkEmoteModeParam/"
+                + "DazedEmoteModeParam/WaterEmoteModeParam/AttentionEmoteModeParam/GuardEmoteModeParam values for precise "
                 + "emote matching. 'guarddebug' breaks down the guard auto-trigger's two conditions "
                 + "(scale threshold, standing-still) separately, plus when it'll next fire. "
                 + "'gcddebug' shows the configured GCD recast group's live cooldown state - use it "
@@ -550,12 +550,12 @@ public sealed class Plugin : IDalamudPlugin
         customizePlus.SetCharacterObjectIndex(ObjectTable.LocalPlayer.ObjectIndex);
 
         // Tracked unconditionally, every tick, regardless of Mode or
-        // whether /cackle is active - see lastAboveCackleDrainFloorTime's
+        // whether /dazed is active - see lastAboveDazedDrainFloorTime's
         // own doc comment above for why this needs to be tracked this
-        // broadly rather than only within the cackle-specific block
+        // broadly rather than only within the dazed-specific block
         // further down.
-        if (jobCurrentScale > Configuration.CackleDrainFloorScale)
-            lastAboveCackleDrainFloorTime = ImGuiNowSeconds();
+        if (jobCurrentScale > Configuration.DazedDrainFloorScale)
+            lastAboveDazedDrainFloorTime = ImGuiNowSeconds();
 
         // Fires the burp once its scheduled delay elapses, regardless
         // of Mode, freeze state, or whether the Self Sucking Threshold's
@@ -577,9 +577,9 @@ public sealed class Plugin : IDalamudPlugin
 
         // Scaling Paused: an early return covering everything below
         // that would modify or push scale - passive growth, all the
-        // ability-use/damage-taken/jump/cackle/guard mechanics, the
+        // ability-use/damage-taken/jump/dazed/guard mechanics, the
         // ease-toward-target animation, and the Customize+ push itself.
-        // Deliberately placed AFTER the two checks above (cackle-floor
+        // Deliberately placed AFTER the two checks above (dazed-floor
         // tracking and the scheduled burp), since neither of those
         // actually changes scale - the burp is a sound effect already
         // committed to before pausing, and the floor-tracking timestamp
@@ -681,7 +681,7 @@ public sealed class Plugin : IDalamudPlugin
                     // Particle burst only for the reducing case
                     // (negative DamageTakenScaleIncrease) - matches
                     // every other genuine reduction in this file
-                    // (GCD, ability-use, cackle-drain) getting the
+                    // (GCD, ability-use, dazed-drain) getting the
                     // same "emptying the gauge" payoff. The raising
                     // case (positive amount, the original "Increases"
                     // behavior) still just wakes the gauge from idle,
@@ -826,7 +826,7 @@ public sealed class Plugin : IDalamudPlugin
 
         // /attention - purely wakes the HUD gauge from its idle fade,
         // doesn't touch the job scale at all. Mode-agnostic (unlike
-        // shakedrink/cackle, which are Job-mode-specific mechanics) since
+        // shakedrink/dazed, which are Job-mode-specific mechanics) since
         // the gauge itself is visible in every mode - this exists
         // specifically so you can "check the gauge's status" without
         // needing to use an ability or take damage first. Cheap enough
@@ -852,12 +852,12 @@ public sealed class Plugin : IDalamudPlugin
         if (Configuration.HudShowAboveScaleEnabled && GetAppliedScale() >= Configuration.HudShowAboveScaleThreshold)
             hudGauge.WakeFromIdle();
 
-        // Self Sucking auto-attention-swap + burp: while /cackle's drain
-        // is active AND scale is at/below CackleDrainFloorScale (the
+        // Self Sucking auto-attention-swap + burp: while /dazed's drain
+        // is active AND scale is at/below DazedDrainFloorScale (the
         // SAME floor the drain mechanic itself is capped at - this used
         // to be a separate SelfSuckingThreshold value, unified here per
         // request since scale literally can't drop below
-        // CackleDrainFloorScale via the drain alone, so a separate,
+        // DazedDrainFloorScale via the drain alone, so a separate,
         // potentially-inconsistent threshold made little practical
         // sense - SelfSuckingThreshold has been removed entirely).
         // Deliberately mode-agnostic and freeze-agnostic, same reasoning
@@ -866,7 +866,7 @@ public sealed class Plugin : IDalamudPlugin
         //
         // The /attention swap now repeats once per second for as long
         // as both conditions hold, rather than firing once - per
-        // request, /cackle should ALWAYS swap to /attention while at the
+        // request, /dazed should ALWAYS swap to /attention while at the
         // floor, not just attempt it once. This is also a defensive
         // measure against something outside this plugin's control: it's
         // not confirmed whether the game actually allows switching
@@ -879,23 +879,23 @@ public sealed class Plugin : IDalamudPlugin
         // scale was observed strictly above the floor within the last
         // few seconds (see SelfSuckingBurpRecentAboveFloorWindowSeconds),
         // AND is at/below it now - not on every repeated swap attempt,
-        // and NOT just because this is the first tick /cackle happened
+        // and NOT just because this is the first tick /dazed happened
         // to be checked while already sitting at/below the floor (e.g.
-        // /cackle starting while scale was already down there from an
+        // /dazed starting while scale was already down there from an
         // earlier session - a plain single-tick falling-edge check
         // couldn't tell that apart from a real fresh drop, since
-        // cackleAtOrBelowFloorLastCheck resets every time /cackle stops
+        // dazedAtOrBelowFloorLastCheck resets every time /dazed stops
         // being active).
         {
-            var cackleActiveForThreshold = Configuration.CackleDrainBoostEnabled && emoteLoopTracker.IsCackleActive(Configuration);
-            var atOrBelowFloor = jobCurrentScale <= Configuration.CackleDrainFloorScale;
+            var dazedActiveForThreshold = Configuration.DazedDrainBoostEnabled && emoteLoopTracker.IsDazedActive(Configuration);
+            var atOrBelowFloor = jobCurrentScale <= Configuration.DazedDrainFloorScale;
 
-            if (cackleActiveForThreshold && atOrBelowFloor)
+            if (dazedActiveForThreshold && atOrBelowFloor)
             {
-                if (!cackleAtOrBelowFloorLastCheck)
+                if (!dazedAtOrBelowFloorLastCheck)
                 {
-                    var wasRecentlyAboveFloor = lastAboveCackleDrainFloorTime >= 0d
-                        && ImGuiNowSeconds() - lastAboveCackleDrainFloorTime <= Configuration.SelfSuckingBurpRecentAboveFloorWindowSeconds;
+                    var wasRecentlyAboveFloor = lastAboveDazedDrainFloorTime >= 0d
+                        && ImGuiNowSeconds() - lastAboveDazedDrainFloorTime <= Configuration.SelfSuckingBurpRecentAboveFloorWindowSeconds;
 
                     if (wasRecentlyAboveFloor)
                     {
@@ -908,14 +908,14 @@ public sealed class Plugin : IDalamudPlugin
                     }
                 }
 
-                cackleAtOrBelowFloorLastCheck = true;
+                dazedAtOrBelowFloorLastCheck = true;
 
                 if (Configuration.SelfSuckingThresholdAutoAttentionEnabled)
                 {
                     var swapCheckNow = ImGuiNowSeconds();
-                    if (swapCheckNow - lastCackleAttentionSwapTime >= CackleAttentionSwapIntervalSeconds)
+                    if (swapCheckNow - lastDazedAttentionSwapTime >= DazedAttentionSwapIntervalSeconds)
                     {
-                        lastCackleAttentionSwapTime = swapCheckNow;
+                        lastDazedAttentionSwapTime = swapCheckNow;
                         try
                         {
                             GameCommandSender.SendCommand("/attention motion");
@@ -929,7 +929,7 @@ public sealed class Plugin : IDalamudPlugin
             }
             else
             {
-                cackleAtOrBelowFloorLastCheck = false;
+                dazedAtOrBelowFloorLastCheck = false;
             }
         }
 
@@ -1125,41 +1125,41 @@ public sealed class Plugin : IDalamudPlugin
                 // Three looping emotes can override this normal growth:
                 // /shakedrink dramatically speeds up growth AND forces
                 // its ceiling to JobUpperLimitScale (Maximum Scaling In
-                // Combat) regardless of actual combat state; /cackle and
+                // Combat) regardless of actual combat state; /dazed and
                 // /water ("Breast Feeding Drain") each do the mirror
                 // opposite, dramatically speeding up a DRAIN toward
                 // their own independently-configured floor instead of
                 // growing at all. Only one can be true at a time (you
                 // can only perform one looping emote at once), but
-                // cackle is checked first, then water, as a defensive
+                // dazed is checked first, then water, as a defensive
                 // tie-break. The instant
                 // whichever emote stops, everything reverts to normal on the
                 // very next frame - whatever value was reached simply
                 // stays there, it doesn't snap back on its own.
-                var cackleDrainActive = Configuration.CackleDrainBoostEnabled && emoteLoopTracker.IsCackleActive(Configuration);
+                var dazedDrainActive = Configuration.DazedDrainBoostEnabled && emoteLoopTracker.IsDazedActive(Configuration);
                 var waterDrainActive = Configuration.WaterDrainBoostEnabled && emoteLoopTracker.IsWaterActive(Configuration);
                 var shakeDrinkActive = Configuration.ShakeDrinkBoostEnabled && emoteLoopTracker.IsShakeDrinkActive(Configuration);
 
-                if (cackleDrainActive)
+                if (dazedDrainActive)
                 {
-                    var drainPerSecond = Configuration.PassiveScaleGenPerSecond * Configuration.CackleDrainRateMultiplier;
-                    jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.CackleDrainFloorScale, drainPerSecond, deltaSeconds);
+                    var drainPerSecond = Configuration.PassiveScaleGenPerSecond * Configuration.DazedDrainRateMultiplier;
+                    jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.DazedDrainFloorScale, drainPerSecond, deltaSeconds);
 
                     // Repeating milk burst (bottle-local only now) while
                     // the drain is actively running, once per second, at
                     // baseline (non-ability-use) intensity.
-                    var cackleBurstNow = ImGuiNowSeconds();
-                    if (cackleBurstNow - lastCackleBurstTime >= CackleBurstIntervalSeconds)
+                    var dazedBurstNow = ImGuiNowSeconds();
+                    if (dazedBurstNow - lastDazedBurstTime >= DazedBurstIntervalSeconds)
                     {
                         hudGauge.Trigger();
-                        lastCackleBurstTime = cackleBurstNow;
+                        lastDazedBurstTime = dazedBurstNow;
                     }
                 }
                 else if (waterDrainActive)
                 {
-                    // Mirror of the cackleDrainActive branch above, just
+                    // Mirror of the dazedDrainActive branch above, just
                     // against WaterDrainRateMultiplier/
-                    // WaterDrainFloorScale instead of Cackle's own.
+                    // WaterDrainFloorScale instead of Dazed's own.
                     var drainPerSecond = Configuration.PassiveScaleGenPerSecond * Configuration.WaterDrainRateMultiplier;
                     jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.WaterDrainFloorScale, drainPerSecond, deltaSeconds);
 
@@ -1184,7 +1184,7 @@ public sealed class Plugin : IDalamudPlugin
                     // deliberate activity, not "just passively
                     // generating gauge" - wake every frame it's active
                     // (WakeFromIdle() is a cheap timestamp write, no
-                    // throttling needed the way the cackle-drain burst
+                    // throttling needed the way the dazed-drain burst
                     // above needs one). Ordinary unboosted passive
                     // growth deliberately does NOT do this - see the
                     // class doc comment on HudGaugeWindow for why.
@@ -1195,14 +1195,14 @@ public sealed class Plugin : IDalamudPlugin
                 // Extra Scale Gen: a SECOND, independent rate, standalone
                 // and NOT multiplicative of any other factor -
                 // Configuration.ExtraScaleGenPerSecond is used exactly
-                // as configured, never scaled by CackleDrainRateMultiplier,
+                // as configured, never scaled by DazedDrainRateMultiplier,
                 // WaterDrainRateMultiplier, ShakeDrinkGrowthRateMultiplier,
                 // or anything else the way
                 // PassiveScaleGenPerSecond above is. Gated behind
-                // !cackleDrainActive && !waterDrainActive per request, so
+                // !dazedDrainActive && !waterDrainActive per request, so
                 // it can no longer
                 // generate ANY scaling change - positive or negative -
-                // at the same time /cackle's OR /water's own drain is
+                // at the same time /dazed's OR /water's own drain is
                 // actively
                 // running; previously this ran unconditionally, which
                 // meant a positive value here could partially or fully
@@ -1225,7 +1225,7 @@ public sealed class Plugin : IDalamudPlugin
                 // be pushing scale in opposite directions within the
                 // same tick - that interaction is unchanged, only the
                 // drain-active cases were fixed.
-                if (!cackleDrainActive && !waterDrainActive)
+                if (!dazedDrainActive && !waterDrainActive)
                 {
                     if (Configuration.ExtraScaleGenPerSecond > 0f)
                         jobCurrentScale = JobScale.ApplyGrowth(jobCurrentScale, Configuration.JobUpperLimitScale, Configuration.ExtraScaleGenPerSecond, deltaSeconds);

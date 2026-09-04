@@ -21,11 +21,11 @@ namespace MilkMeter;
 /// briefly swapped to /greentea, then reverted after confirming
 /// /greentea isn't actually a looping emote at all (per an official
 /// Square Enix forum bug report: it plays a single pass and stops, so
-/// Character.Mode never reaches EmoteLoop for it) - it's back to /cackle
-/// (ModeParam 98, confirmed working via the process below).
+/// Character.Mode never reaches EmoteLoop for it) - it's back to /dazed
+/// (ModeParam 79, confirmed working via the process below).
 ///
-/// The specific numeric ModeParam values for /shakedrink (76), /cackle
-/// (98), /water (75), /attention (29), and /guard (58) were NOT guessed - no public
+/// The specific numeric ModeParam values for /shakedrink (76), /dazed
+/// (79), /water (75), /attention (29), and /guard (58) were NOT guessed - no public
 /// verified mapping from FFXIVClientStructs' "EmoteMode" index back to
 /// a named emote was found, so rather than guess (which given this
 /// project's history with duplicate/misleading IDs elsewhere - see
@@ -64,10 +64,10 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
     /// <summary>True while any looping emote is active, further narrowed to only Configuration.ShakeDrinkEmoteModeParam's specific value once that's been set (non-negative).</summary>
     public bool IsShakeDrinkActive(Configuration configuration) => IsMatchingEmoteActive(configuration.ShakeDrinkEmoteModeParam);
 
-    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.CackleEmoteModeParam.</summary>
-    public bool IsCackleActive(Configuration configuration) => IsMatchingEmoteActive(configuration.CackleEmoteModeParam);
+    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.DazedEmoteModeParam.</summary>
+    public bool IsDazedActive(Configuration configuration) => IsMatchingEmoteActive(configuration.DazedEmoteModeParam);
 
-    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.WaterEmoteModeParam - /water ("Breast Feeding Drain"), a second independent drain-toward-a-floor mechanic alongside /cackle.</summary>
+    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.WaterEmoteModeParam - /water ("Breast Feeding Drain"), a second independent drain-toward-a-floor mechanic alongside /dazed.</summary>
     public bool IsWaterActive(Configuration configuration) => IsMatchingEmoteActive(configuration.WaterEmoteModeParam);
 
     /// <summary>Mirror of IsShakeDrinkActive() for Configuration.AttentionEmoteModeParam - /attention, confirmed ModeParam 29, used to wake the HUD gauge from its idle fade rather than affect the scale itself.</summary>
@@ -84,7 +84,7 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
 
     /// <summary>
     /// True while SOME looping emote is active that is NOT one of the
-    /// five specifically tracked ones (shakedrink, cackle, water,
+    /// five specifically tracked ones (shakedrink, dazed, water,
     /// attention, guard). Originally used by Plugin.cs's guard-auto-trigger as one of
     /// its firing conditions, but that requirement was removed per
     /// request - the guard trigger no longer checks this at all. Kept
@@ -106,14 +106,14 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
             return false;
 
         if (configuration.ShakeDrinkEmoteModeParam < 0
-            || configuration.CackleEmoteModeParam < 0
+            || configuration.DazedEmoteModeParam < 0
             || configuration.WaterEmoteModeParam < 0
             || configuration.AttentionEmoteModeParam < 0
             || configuration.GuardEmoteModeParam < 0)
             return false;
 
         return modeParam != configuration.ShakeDrinkEmoteModeParam
-            && modeParam != configuration.CackleEmoteModeParam
+            && modeParam != configuration.DazedEmoteModeParam
             && modeParam != configuration.WaterEmoteModeParam
             && modeParam != configuration.AttentionEmoteModeParam
             && modeParam != configuration.GuardEmoteModeParam;
@@ -135,9 +135,9 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
             $"Configured ShakeDrinkEmoteModeParam: {configuration.ShakeDrinkEmoteModeParam} " +
             $"({(configuration.ShakeDrinkEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
             $"currently active: {IsShakeDrinkActive(configuration)}\n" +
-            $"Configured CackleEmoteModeParam: {configuration.CackleEmoteModeParam} " +
-            $"({(configuration.CackleEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
-            $"currently active: {IsCackleActive(configuration)}\n" +
+            $"Configured DazedEmoteModeParam: {configuration.DazedEmoteModeParam} " +
+            $"({(configuration.DazedEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
+            $"currently active: {IsDazedActive(configuration)}\n" +
             $"Configured WaterEmoteModeParam: {configuration.WaterEmoteModeParam} " +
             $"({(configuration.WaterEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
             $"currently active: {IsWaterActive(configuration)}\n" +

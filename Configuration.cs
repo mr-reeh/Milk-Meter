@@ -23,7 +23,7 @@ public enum ScaleMode
 /// </summary>
 public sealed class EmoteScaleTrigger
 {
-    /// <summary>Free-text label for your own reference (e.g. "/cackle") - not used for matching.</summary>
+    /// <summary>Free-text label for your own reference (e.g. "/dazed") - not used for matching.</summary>
     public string Label { get; set; } = "";
 
     public string ExpectedChatText { get; set; } = "";
@@ -42,7 +42,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// If true, every mechanic that would modify or push the applied
     /// chest scale is skipped entirely - passive growth, ability-use,
-    /// damage-taken, jumping, /cackle/guard, death-reset, the
+    /// damage-taken, jumping, /dazed/guard, death-reset, the
     /// ease-toward-target animation, and the Customize+ push itself.
     /// Unlike Enabled above, this deliberately leaves the HUD gauge and
     /// its particle effects still rendering, just dimmed to 10% opacity
@@ -182,19 +182,19 @@ public sealed class Configuration : IPluginConfiguration
     /// (JobOveruseBonus) does that. A rate of 0 OR BELOW means no
     /// passive growth at all (JobScale.ApplyGrowth's own internal check
     /// is "growthPerSecond &lt;= 0f", not just "== 0f"). IMPORTANT: this
-    /// same value also feeds the /cackle drain rate below
-    /// (drainPerSecond = PassiveScaleGenPerSecond * CackleDrainRateMultiplier,
-    /// see Plugin.cs) - since CackleDrainRateMultiplier is always
+    /// same value also feeds the /dazed drain rate below
+    /// (drainPerSecond = PassiveScaleGenPerSecond * DazedDrainRateMultiplier,
+    /// see Plugin.cs) - since DazedDrainRateMultiplier is always
     /// positive, a negative PassiveScaleGenPerSecond makes that computed
     /// drainPerSecond negative too, which ALSO trips ApplyDrain's own
     /// "&lt;= 0f means no drain" check. In other words: the ENTIRE negative
     /// half of this slider's range currently behaves identically to
-    /// exactly 0 for BOTH normal passive growth AND the /cackle drain -
+    /// exactly 0 for BOTH normal passive growth AND the /dazed drain -
     /// there's no distinct "negative" effect yet, unlike
     /// ExtraScaleGenPerSecond below, which does have one. This was
     /// flagged to the user rather than silently redesigned, since making
     /// it meaningful would require a real design decision about how it
-    /// should interact with the /cackle drain specifically.
+    /// should interact with the /dazed drain specifically.
     /// </summary>
     public float PassiveScaleGenPerSecond { get; set; } = JobScale.DefaultPassiveScaleGenPerSecond;
 
@@ -203,7 +203,7 @@ public sealed class Configuration : IPluginConfiguration
     /// (in addition to) PassiveScaleGenPerSecond above - standalone and
     /// NOT multiplicative of any other factor, unlike
     /// PassiveScaleGenPerSecond (which gets scaled by
-    /// CackleDrainRateMultiplier or ShakeDrinkGrowthRateMultiplier
+    /// DazedDrainRateMultiplier or ShakeDrinkGrowthRateMultiplier
     /// depending on state) - this value is used exactly as configured.
     /// IGNORES the in/out of combat ceiling switch entirely. A
     /// POSITIVE value grows toward JobUpperLimitScale (Maximum Scaling In
@@ -214,12 +214,12 @@ public sealed class Configuration : IPluginConfiguration
     /// combat-state-independent reasoning in the opposite direction. Off
     /// (0.0) by
     /// default, so existing behavior is unaffected unless explicitly
-    /// turned up. Per request, this is now gated behind /cackle's drain
-    /// NOT being active - while /cackle's drain is running, neither this
+    /// turned up. Per request, this is now gated behind /dazed's drain
+    /// NOT being active - while /dazed's drain is running, neither this
     /// nor ordinary Passive Scale Gen generates any scaling change at
     /// all (Passive Scale Gen is instead entirely repurposed into the
     /// drain rate itself during that window, contributing no separate
-    /// growth of its own), so /cackle's drain is never fought against by
+    /// growth of its own), so /dazed's drain is never fought against by
     /// either. Outside of that window, a negative value here still works
     /// against ordinary passive growth/shakedrink-boosted growth, since
     /// both push scale in opposite directions within the same tick - that
@@ -259,9 +259,9 @@ public sealed class Configuration : IPluginConfiguration
     public int ShakeDrinkEmoteModeParam { get; set; } = 76;
 
     /// <summary>
-    /// Mirror of ShakeDrinkBoostEnabled for /cackle: while active, this
+    /// Mirror of ShakeDrinkBoostEnabled for /dazed: while active, this
     /// dramatically speeds up draining the job scale DOWN toward
-    /// CackleDrainFloorScale instead of growing it - "empty the gauge".
+    /// DazedDrainFloorScale instead of growing it - "empty the gauge".
     /// Reverts to normal Passive Scale Gen the instant the emote stops, same
     /// "stays wherever it ended up" behavior as the shakedrink boost. On
     /// by default. (Briefly swapped to /greentea, then reverted after
@@ -269,42 +269,42 @@ public sealed class Configuration : IPluginConfiguration
     /// plays a single pass and stops, so Character.Mode never reaches
     /// EmoteLoop for it, which this whole detection mechanism requires.)
     /// </summary>
-    public bool CackleDrainBoostEnabled { get; set; } = true;
+    public bool DazedDrainBoostEnabled { get; set; } = true;
 
-    /// <summary>How many times faster than normal Passive Scale Gen's rate the drain runs while /cackle is active. 10x by default, matching ShakeDrinkGrowthRateMultiplier.</summary>
-    public float CackleDrainRateMultiplier { get; set; } = 7.0f;
+    /// <summary>How many times faster than normal Passive Scale Gen's rate the drain runs while /dazed is active. 10x by default, matching ShakeDrinkGrowthRateMultiplier.</summary>
+    public float DazedDrainRateMultiplier { get; set; } = 7.0f;
 
     /// <summary>
-    /// The floor the /cackle drain targets - a dedicated value separate
+    /// The floor the /dazed drain targets - a dedicated value separate
     /// from JobCombatFloorScale (Minimum Scaling), which stays used
     /// elsewhere (ability-use reduction, damage-taken reduction,
-    /// death-reset). 1.20 by default, so /cackle alone can't drain all
+    /// death-reset). 1.20 by default, so /dazed alone can't drain all
     /// the way down to Minimum Scaling.
     /// </summary>
-    public float CackleDrainFloorScale { get; set; } = 1.0f;
+    public float DazedDrainFloorScale { get; set; } = 1.0f;
 
-    /// <summary>The ModeParam value that identifies /cackle specifically. Confirmed as 98 via /milkmeter emotedebug - see ShakeDrinkEmoteModeParam for the full story on how this kind of value gets found rather than guessed.</summary>
-    public int CackleEmoteModeParam { get; set; } = 98;
+    /// <summary>The ModeParam value that identifies /dazed specifically. Confirmed as 79 via /milkmeter emotedebug - see ShakeDrinkEmoteModeParam for the full story on how this kind of value gets found rather than guessed.</summary>
+    public int DazedEmoteModeParam { get; set; } = 79;
 
     /// <summary>
-    /// Mirror of CackleDrainBoostEnabled for /water ("Breast Feeding
+    /// Mirror of DazedDrainBoostEnabled for /water ("Breast Feeding
     /// Drain"): while active, this dramatically speeds up draining the
     /// job scale DOWN toward WaterDrainFloorScale instead of growing it
-    /// - same "empty the gauge" mechanic as /cackle, just a second,
+    /// - same "empty the gauge" mechanic as /dazed, just a second,
     /// independently-configured emote/rate/floor rather than sharing
-    /// Cackle's. Reverts to normal Passive Scale Gen the instant the
+    /// Dazed's. Reverts to normal Passive Scale Gen the instant the
     /// emote stops, same "stays wherever it ended up" behavior as every
     /// other looping-emote boost in this file. On by default.
     /// </summary>
     public bool WaterDrainBoostEnabled { get; set; } = true;
 
-    /// <summary>How many times faster than normal Passive Scale Gen's rate the drain runs while /water is active. 7x by default, matching CackleDrainRateMultiplier.</summary>
+    /// <summary>How many times faster than normal Passive Scale Gen's rate the drain runs while /water is active. 7x by default, matching DazedDrainRateMultiplier.</summary>
     public float WaterDrainRateMultiplier { get; set; } = 7.0f;
 
     /// <summary>
     /// The floor the /water drain targets - a dedicated value separate
     /// from both JobCombatFloorScale (Minimum Scaling) and
-    /// CackleDrainFloorScale, which stay used elsewhere. 0.70 by
+    /// DazedDrainFloorScale, which stay used elsewhere. 0.70 by
     /// default.
     /// </summary>
     public float WaterDrainFloorScale { get; set; } = 0.70f;
@@ -315,7 +315,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// If true, performing the /attention looping emote wakes the HUD
     /// gauge from its idle fade (see HudGaugeWindow.WakeFromIdle()) -
-    /// unlike ShakeDrinkBoostEnabled/CackleDrainBoostEnabled, this does
+    /// unlike ShakeDrinkBoostEnabled/DazedDrainBoostEnabled, this does
     /// NOT affect the job scale itself in any way; it's purely a "check
     /// the gauge's current status" gesture, mode-agnostic (works
     /// regardless of the active Scale Source, since the HUD gauge itself
@@ -377,8 +377,8 @@ public sealed class Configuration : IPluginConfiguration
     public int BallDanceEmoteModeParam { get; set; } = 6;
 
     /// <summary>
-    /// If true, while /cackle's drain is active AND scale is at/below
-    /// CackleDrainFloorScale (the same floor the drain itself is capped
+    /// If true, while /dazed's drain is active AND scale is at/below
+    /// DazedDrainFloorScale (the same floor the drain itself is capped
     /// at - this used to check a separate SelfSuckingThreshold value,
     /// removed per request in favor of unifying on the floor, since
     /// scale literally can't drop below it via the drain alone),
@@ -394,14 +394,14 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool SelfSuckingThresholdAutoAttentionEnabled { get; set; } = true;
 
-    /// <summary>How many seconds after the Self Sucking auto-attention-swap first reaches CackleDrainFloorScale before the burp sound (BurpSoundPlayer) plays. 0.5 by default.</summary>
+    /// <summary>How many seconds after the Self Sucking auto-attention-swap first reaches DazedDrainFloorScale before the burp sound (BurpSoundPlayer) plays. 0.5 by default.</summary>
     public float SelfSuckingBurpDelaySeconds { get; set; } = 0.1f;
 
     /// <summary>
     /// The burp only plays if scale was observed strictly above
-    /// CackleDrainFloorScale within this many seconds before falling to
+    /// DazedDrainFloorScale within this many seconds before falling to
     /// at/below it - distinguishes a genuine fresh drop (burp plays)
-    /// from starting /cackle while already at/below the floor (burp
+    /// from starting /dazed while already at/below the floor (burp
     /// should NOT play, since scale never actually "fell" from
     /// anywhere recent). 5.0 by default.
     /// </summary>

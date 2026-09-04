@@ -9,7 +9,7 @@ namespace MilkMeter;
 /// Programmatically executes a raw game chat/slash command, as if the
 /// player had typed it into the chatbox and pressed enter. Built
 /// specifically to force "/attention motion" when the Self Sucking
-/// Threshold is crossed (see Plugin.cs's cackle-drain branch).
+/// Threshold is crossed (see Plugin.cs's dazed-drain branch).
 ///
 /// The exact method here - RaptureShellModule.ExecuteCommandInner(Utf8String*
 /// command, UIModule* uiModule) - was confirmed directly from a real

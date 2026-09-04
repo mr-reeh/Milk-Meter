@@ -109,7 +109,7 @@ namespace MilkMeter;
 /// attention is actually going on. Instead, the idle timer only resets
 /// via an explicit WakeFromIdle() call, which Plugin.cs makes at
 /// specific deliberate-action points: any Trigger()ed particle burst
-/// (ability-use/damage-taken reductions, the repeating cackle-drain
+/// (ability-use/damage-taken reductions, the repeating dazed-drain
 /// burst), the increase-variant events that don't fire a burst, active
 /// shakedrink-boosted growth, and the dedicated /attention emote (which
 /// exists specifically to "check the gauge's status" without needing to
@@ -185,7 +185,7 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
     /// Draw() call - avoids any staleness concern entirely, at the cost
     /// of duplicating a few lines of size math. intensity is passed by
     /// Plugin.cs - higher for ability-use reductions than for
-    /// damage-taken/cackle-drain ones.
+    /// damage-taken/dazed-drain ones.
     ///
     /// Origin is the very top tip of the bottle (the top edge of the
     /// nipple region), not the body's center - and speed/gravity/droplet

@@ -476,8 +476,8 @@ public static class JobScale
     /// "none"). If currentScale is already AT
     /// OR BELOW floorScale, this does nothing and returns currentScale
     /// unchanged - same "never restores" philosophy as ApplyGrowth.
-    /// Built specifically for the /cackle emote's "empty the gauge"
-    /// effect - see Plugin.cs's EmoteLoopTracker.IsCackleActive() usage.
+    /// Built specifically for the /dazed emote's "empty the gauge"
+    /// effect - see Plugin.cs's EmoteLoopTracker.IsDazedActive() usage.
     /// </summary>
     public static float ApplyDrain(float currentScale, float floorScale, float drainPerSecond, float deltaSeconds)
     {

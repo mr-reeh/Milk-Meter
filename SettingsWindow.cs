@@ -76,7 +76,7 @@ public sealed class SettingsWindow(
         }
 
         ImGui.SameLine();
-        if (ImGui.RadioButton("Job Actions", configuration.Mode == ScaleMode.Job))
+        if (ImGui.RadioButton("Mini-Game", configuration.Mode == ScaleMode.Job))
         {
             configuration.Mode = ScaleMode.Job;
             configuration.Save();
@@ -134,7 +134,7 @@ public sealed class SettingsWindow(
         else if (configuration.Mode == ScaleMode.Job)
         {
             ImGui.Separator();
-            ImGui.Text("Job Actions Scaling");
+            ImGui.Text("Mini-Game Scaling");
 
             var overuseBonus = configuration.JobOveruseBonus;
             if (ImGui.SliderFloat("Base Reduction Per Action", ref overuseBonus, 0.00f, 1.00f, "%.2f"))
@@ -153,7 +153,7 @@ public sealed class SettingsWindow(
                 "Still normally capped at Maximum Scaling (Out of Combat) while out of combat, or " +
                 "Maximum Scaling (In Combat) while in combat. NOTE: negative values currently have " +
                 "NO distinct effect - 0 or below just means no growth, and this value also feeds " +
-                "the /cackle drain rate, which similarly goes inert once this is negative. The whole " +
+                "the /dazed drain rate, which similarly goes inert once this is negative. The whole " +
                 "negative half of this slider is currently a dead zone, identical to 0.");
 
             var extraScaleGen = configuration.ExtraScaleGenPerSecond;
@@ -167,7 +167,7 @@ public sealed class SettingsWindow(
                 "in/out of combat rule entirely. Positive GROWS toward Maximum Scaling (In Combat) " +
                 "regardless of actual combat state; negative DRAINS toward Minimum Scaling (Always) " +
                 "instead, same combat-independent reasoning in reverse. Off (0) by default. Paused " +
-                "entirely while /cackle's drain is active, so it can never fight against that drain " +
+                "entirely while /dazed's drain is active, so it can never fight against that drain " +
                 "- outside of that, a negative value here still works against ordinary passive " +
                 "growth.");
 
@@ -320,36 +320,36 @@ public sealed class SettingsWindow(
                 "emote stops. Default value (76) confirmed via /milkmeter emotedebug; -1 " +
                 "would match ANY looping emote instead, in case a game update ever changes it.");
 
-            var cackleDrainEnabled = configuration.CackleDrainBoostEnabled;
-            if (ImGui.Checkbox("Self Sucking Drain (/cackle)", ref cackleDrainEnabled))
+            var dazedDrainEnabled = configuration.DazedDrainBoostEnabled;
+            if (ImGui.Checkbox("Self Sucking Drain (/dazed)", ref dazedDrainEnabled))
             {
-                configuration.CackleDrainBoostEnabled = cackleDrainEnabled;
+                configuration.DazedDrainBoostEnabled = dazedDrainEnabled;
                 configuration.Save();
             }
 
-            var cackleDrainRate = configuration.CackleDrainRateMultiplier;
-            if (ImGui.SliderFloat("Cackle Drain Rate Multiplier", ref cackleDrainRate, 1.0f, 30.0f, "%.1fx"))
+            var dazedDrainRate = configuration.DazedDrainRateMultiplier;
+            if (ImGui.SliderFloat("Dazed Drain Rate Multiplier", ref dazedDrainRate, 1.0f, 30.0f, "%.1fx"))
             {
-                configuration.CackleDrainRateMultiplier = cackleDrainRate;
+                configuration.DazedDrainRateMultiplier = dazedDrainRate;
                 configuration.Save();
             }
 
-            var cackleDrainFloor = configuration.CackleDrainFloorScale;
-            if (ImGui.SliderFloat("Cackle Drain Floor", ref cackleDrainFloor, 0.10f, 2.00f, "%.2f"))
+            var dazedDrainFloor = configuration.DazedDrainFloorScale;
+            if (ImGui.SliderFloat("Dazed Drain Floor", ref dazedDrainFloor, 0.10f, 2.00f, "%.2f"))
             {
-                configuration.CackleDrainFloorScale = cackleDrainFloor;
+                configuration.DazedDrainFloorScale = dazedDrainFloor;
                 configuration.Save();
             }
 
-            var cackleModeParam = configuration.CackleEmoteModeParam;
-            if (ImGui.InputInt("Cackle ModeParam (-1 = Any Looping Emote)", ref cackleModeParam))
+            var dazedModeParam = configuration.DazedEmoteModeParam;
+            if (ImGui.InputInt("Dazed ModeParam (-1 = Any Looping Emote)", ref dazedModeParam))
             {
-                configuration.CackleEmoteModeParam = cackleModeParam;
+                configuration.DazedEmoteModeParam = dazedModeParam;
                 configuration.Save();
             }
-            ImGui.TextDisabled("Mirror opposite of Shake Drink: while /cackle is active, scale drains " +
-                "dramatically toward Cackle Drain Floor (a separate value from Minimum Scaling) instead " +
-                "of growing - reverting instantly once the emote stops. ModeParam default (98) " +
+            ImGui.TextDisabled("Mirror opposite of Shake Drink: while /dazed is active, scale drains " +
+                "dramatically toward Dazed Drain Floor (a separate value from Minimum Scaling) instead " +
+                "of growing - reverting instantly once the emote stops. ModeParam default (79) " +
                 "confirmed via /milkmeter emotedebug.");
 
             var waterDrainEnabled = configuration.WaterDrainBoostEnabled;
@@ -386,7 +386,7 @@ public sealed class SettingsWindow(
                 "simultaneously. ModeParam default (75) confirmed via /milkmeter emotedebug.");
 
             var selfSuckingAutoAttention = configuration.SelfSuckingThresholdAutoAttentionEnabled;
-            if (ImGui.Checkbox("Self Sucking Threshold (/cackle to /attention)", ref selfSuckingAutoAttention))
+            if (ImGui.Checkbox("Self Sucking Threshold (/dazed to /attention)", ref selfSuckingAutoAttention))
             {
                 configuration.SelfSuckingThresholdAutoAttentionEnabled = selfSuckingAutoAttention;
                 configuration.Save();
@@ -405,10 +405,10 @@ public sealed class SettingsWindow(
                 configuration.SelfSuckingBurpRecentAboveFloorWindowSeconds = selfSuckingBurpWindow;
                 configuration.Save();
             }
-            ImGui.TextDisabled("While /cackle is active and scale is at or below Cackle Drain Floor (set " +
+            ImGui.TextDisabled("While /dazed is active and scale is at or below Dazed Drain Floor (set " +
                 "above, no longer a separate value here), repeatedly forces \"/attention motion\" once " +
                 "per second for as long as both hold - not just once. The burp sound only plays if " +
-                "scale was above the floor within this many seconds beforehand - not if /cackle starts " +
+                "scale was above the floor within this many seconds beforehand - not if /dazed starts " +
                 "while scale is already sitting at/below the floor.");
 
             var attentionEnabled = configuration.AttentionWakeEnabled;
@@ -613,7 +613,7 @@ public sealed class SettingsWindow(
         }
         ImGui.TextDisabled("A brief burst of droplets around the bottle every time the gauge is genuinely " +
             "reduced - a tracked ability's own reduction, a negative-amount Damage Taken/Jumping Affects " +
-            "Scale, or the repeating burst while /cackle's drain is active.");
+            "Scale, or the repeating burst while /dazed's drain is active.");
 
         var hudFadeOnIdle = configuration.HudFadeOnIdleEnabled;
         if (ImGui.Checkbox("Fade Out When Idle", ref hudFadeOnIdle))
