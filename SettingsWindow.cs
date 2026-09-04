@@ -352,6 +352,39 @@ public sealed class SettingsWindow(
                 "of growing - reverting instantly once the emote stops. ModeParam default (98) " +
                 "confirmed via /milkmeter emotedebug.");
 
+            var waterDrainEnabled = configuration.WaterDrainBoostEnabled;
+            if (ImGui.Checkbox("Breast Feeding Drain (/water)", ref waterDrainEnabled))
+            {
+                configuration.WaterDrainBoostEnabled = waterDrainEnabled;
+                configuration.Save();
+            }
+
+            var waterDrainRate = configuration.WaterDrainRateMultiplier;
+            if (ImGui.SliderFloat("Water Drain Rate Multiplier", ref waterDrainRate, 1.0f, 30.0f, "%.1fx"))
+            {
+                configuration.WaterDrainRateMultiplier = waterDrainRate;
+                configuration.Save();
+            }
+
+            var waterDrainFloor = configuration.WaterDrainFloorScale;
+            if (ImGui.SliderFloat("Water Drain Floor", ref waterDrainFloor, 0.10f, 2.00f, "%.2f"))
+            {
+                configuration.WaterDrainFloorScale = waterDrainFloor;
+                configuration.Save();
+            }
+
+            var waterModeParam = configuration.WaterEmoteModeParam;
+            if (ImGui.InputInt("Water ModeParam (-1 = Any Looping Emote)", ref waterModeParam))
+            {
+                configuration.WaterEmoteModeParam = waterModeParam;
+                configuration.Save();
+            }
+            ImGui.TextDisabled("A second, independent drain alongside Self Sucking Drain above: while " +
+                "/water is active, scale drains dramatically toward Water Drain Floor (its own " +
+                "separate value) instead of growing - reverting instantly once the emote stops. Only " +
+                "one looping emote can be active at a time, so this and Self Sucking Drain never run " +
+                "simultaneously. ModeParam default (75) confirmed via /milkmeter emotedebug.");
+
             var selfSuckingAutoAttention = configuration.SelfSuckingThresholdAutoAttentionEnabled;
             if (ImGui.Checkbox("Self Sucking Threshold (/cackle to /attention)", ref selfSuckingAutoAttention))
             {

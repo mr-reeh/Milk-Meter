@@ -150,6 +150,14 @@ public sealed class Plugin : IDalamudPlugin
     private const double CackleBurstIntervalSeconds = 1.0;
     private double lastCackleBurstTime = -1d;
 
+    // Mirror of CackleBurstIntervalSeconds/lastCackleBurstTime for
+    // /water's own drain (Breast Feeding Drain) - a fully independent
+    // repeating-burst timer, not shared with Cackle's, since the two
+    // drains are mutually exclusive anyway (only one looping emote can
+    // be active at once) but are otherwise entirely separate features.
+    private const double WaterBurstIntervalSeconds = 1.0;
+    private double lastWaterBurstTime = -1d;
+
     // Falling-edge tracker for the Self Sucking auto-attention-swap's
     // burp sound - true once scale has been observed at/below
     // CackleDrainFloorScale, reset to false the moment it's back above
@@ -291,8 +299,8 @@ public sealed class Plugin : IDalamudPlugin
                 + "'dumpprofile' prints your active Customize+ profile's raw JSON to /xllog. "
                 + "'jobdebug' prints diagnostic info for Job Buff mode's ability/cooldown lookup. "
                 + "'emotedebug' prints your current Character.Mode/ModeParam - use while performing "
-                + "/shakedrink, /cackle, /attention, or /guard to find the ShakeDrinkEmoteModeParam/"
-                + "CackleEmoteModeParam/AttentionEmoteModeParam/GuardEmoteModeParam values for precise "
+                + "/shakedrink, /cackle, /water, /attention, or /guard to find the ShakeDrinkEmoteModeParam/"
+                + "CackleEmoteModeParam/WaterEmoteModeParam/AttentionEmoteModeParam/GuardEmoteModeParam values for precise "
                 + "emote matching. 'guarddebug' breaks down the guard auto-trigger's two conditions "
                 + "(scale threshold, standing-still) separately, plus when it'll next fire. "
                 + "'gcddebug' shows the configured GCD recast group's live cooldown state - use it "
@@ -1114,19 +1122,22 @@ public sealed class Plugin : IDalamudPlugin
                 // frozen (dead, pending revival) - scale stays exactly at
                 // whatever death set it to until the freeze clears.
                 //
-                // Two looping emotes can override this normal growth:
+                // Three looping emotes can override this normal growth:
                 // /shakedrink dramatically speeds up growth AND forces
                 // its ceiling to JobUpperLimitScale (Maximum Scaling In
-                // Combat) regardless of actual combat state; /cackle does
-                // the mirror opposite, dramatically speeding up a DRAIN
-                // toward JobCombatFloorScale (Minimum Scaling) instead of
-                // growing at all. Only one can be true at a time (you can
-                // only perform one looping emote at once), but cackle is
-                // checked first as a defensive tie-break. The instant
-                // either emote stops, everything reverts to normal on the
+                // Combat) regardless of actual combat state; /cackle and
+                // /water ("Breast Feeding Drain") each do the mirror
+                // opposite, dramatically speeding up a DRAIN toward
+                // their own independently-configured floor instead of
+                // growing at all. Only one can be true at a time (you
+                // can only perform one looping emote at once), but
+                // cackle is checked first, then water, as a defensive
+                // tie-break. The instant
+                // whichever emote stops, everything reverts to normal on the
                 // very next frame - whatever value was reached simply
                 // stays there, it doesn't snap back on its own.
                 var cackleDrainActive = Configuration.CackleDrainBoostEnabled && emoteLoopTracker.IsCackleActive(Configuration);
+                var waterDrainActive = Configuration.WaterDrainBoostEnabled && emoteLoopTracker.IsWaterActive(Configuration);
                 var shakeDrinkActive = Configuration.ShakeDrinkBoostEnabled && emoteLoopTracker.IsShakeDrinkActive(Configuration);
 
                 if (cackleDrainActive)
@@ -1142,6 +1153,21 @@ public sealed class Plugin : IDalamudPlugin
                     {
                         hudGauge.Trigger();
                         lastCackleBurstTime = cackleBurstNow;
+                    }
+                }
+                else if (waterDrainActive)
+                {
+                    // Mirror of the cackleDrainActive branch above, just
+                    // against WaterDrainRateMultiplier/
+                    // WaterDrainFloorScale instead of Cackle's own.
+                    var drainPerSecond = Configuration.PassiveScaleGenPerSecond * Configuration.WaterDrainRateMultiplier;
+                    jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.WaterDrainFloorScale, drainPerSecond, deltaSeconds);
+
+                    var waterBurstNow = ImGuiNowSeconds();
+                    if (waterBurstNow - lastWaterBurstTime >= WaterBurstIntervalSeconds)
+                    {
+                        hudGauge.Trigger();
+                        lastWaterBurstTime = waterBurstNow;
                     }
                 }
                 else
@@ -1170,11 +1196,14 @@ public sealed class Plugin : IDalamudPlugin
                 // and NOT multiplicative of any other factor -
                 // Configuration.ExtraScaleGenPerSecond is used exactly
                 // as configured, never scaled by CackleDrainRateMultiplier,
-                // ShakeDrinkGrowthRateMultiplier, or anything else the way
+                // WaterDrainRateMultiplier, ShakeDrinkGrowthRateMultiplier,
+                // or anything else the way
                 // PassiveScaleGenPerSecond above is. Gated behind
-                // !cackleDrainActive per request, so it can no longer
+                // !cackleDrainActive && !waterDrainActive per request, so
+                // it can no longer
                 // generate ANY scaling change - positive or negative -
-                // at the same time /cackle's own drain is actively
+                // at the same time /cackle's OR /water's own drain is
+                // actively
                 // running; previously this ran unconditionally, which
                 // meant a positive value here could partially or fully
                 // counteract the drain in the very same tick. Still
@@ -1192,11 +1221,11 @@ public sealed class Plugin : IDalamudPlugin
                 // default, so this has no effect unless explicitly
                 // configured. A negative value here still works AGAINST
                 // ordinary passive growth/shakedrink-boosted growth
-                // above whenever cackle ISN'T active, since both would
+                // above whenever neither drain is active, since both would
                 // be pushing scale in opposite directions within the
                 // same tick - that interaction is unchanged, only the
-                // cackle-drain case was fixed.
-                if (!cackleDrainActive)
+                // drain-active cases were fixed.
+                if (!cackleDrainActive && !waterDrainActive)
                 {
                     if (Configuration.ExtraScaleGenPerSecond > 0f)
                         jobCurrentScale = JobScale.ApplyGrowth(jobCurrentScale, Configuration.JobUpperLimitScale, Configuration.ExtraScaleGenPerSecond, deltaSeconds);

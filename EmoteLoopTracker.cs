@@ -25,11 +25,11 @@ namespace MilkMeter;
 /// (ModeParam 98, confirmed working via the process below).
 ///
 /// The specific numeric ModeParam values for /shakedrink (76), /cackle
-/// (98), /attention (29), and /guard (58) were NOT guessed - no public
+/// (98), /water (75), /attention (29), and /guard (58) were NOT guessed - no public
 /// verified mapping from FFXIVClientStructs' "EmoteMode" index back to
 /// a named emote was found, so rather than guess (which given this
 /// project's history with duplicate/misleading IDs elsewhere - see
-/// JobScale.cs's ResolveActionId - would likely be wrong), all four
+/// JobScale.cs's ResolveActionId - would likely be wrong), all five
 /// were confirmed via /milkmeter emotedebug while actually
 /// performing each emote and reading the real value back. All remain
 /// fully user-configurable in the settings window in case a game update
@@ -67,6 +67,9 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
     /// <summary>Mirror of IsShakeDrinkActive() for Configuration.CackleEmoteModeParam.</summary>
     public bool IsCackleActive(Configuration configuration) => IsMatchingEmoteActive(configuration.CackleEmoteModeParam);
 
+    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.WaterEmoteModeParam - /water ("Breast Feeding Drain"), a second independent drain-toward-a-floor mechanic alongside /cackle.</summary>
+    public bool IsWaterActive(Configuration configuration) => IsMatchingEmoteActive(configuration.WaterEmoteModeParam);
+
     /// <summary>Mirror of IsShakeDrinkActive() for Configuration.AttentionEmoteModeParam - /attention, confirmed ModeParam 29, used to wake the HUD gauge from its idle fade rather than affect the scale itself.</summary>
     public bool IsAttentionActive(Configuration configuration) => IsMatchingEmoteActive(configuration.AttentionEmoteModeParam);
 
@@ -81,8 +84,8 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
 
     /// <summary>
     /// True while SOME looping emote is active that is NOT one of the
-    /// four specifically tracked ones (shakedrink, cackle, attention,
-    /// guard). Originally used by Plugin.cs's guard-auto-trigger as one of
+    /// five specifically tracked ones (shakedrink, cackle, water,
+    /// attention, guard). Originally used by Plugin.cs's guard-auto-trigger as one of
     /// its firing conditions, but that requirement was removed per
     /// request - the guard trigger no longer checks this at all. Kept
     /// around purely as diagnostic info in GetDebugInfo() below (still
@@ -90,7 +93,7 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
     /// result functionally anymore.
     ///
     /// Correctly honors the "-1 = matches ANY looping emote" wildcard
-    /// convention the other four properties already use - if any one of
+    /// convention the other five properties already use - if any one of
     /// them were set to -1, that would mean "every looping emote counts
     /// as this one," so nothing could ever be genuinely "other" while
     /// that's configured; a plain numeric != comparison against -1
@@ -104,12 +107,14 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
 
         if (configuration.ShakeDrinkEmoteModeParam < 0
             || configuration.CackleEmoteModeParam < 0
+            || configuration.WaterEmoteModeParam < 0
             || configuration.AttentionEmoteModeParam < 0
             || configuration.GuardEmoteModeParam < 0)
             return false;
 
         return modeParam != configuration.ShakeDrinkEmoteModeParam
             && modeParam != configuration.CackleEmoteModeParam
+            && modeParam != configuration.WaterEmoteModeParam
             && modeParam != configuration.AttentionEmoteModeParam
             && modeParam != configuration.GuardEmoteModeParam;
     }
@@ -133,6 +138,9 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
             $"Configured CackleEmoteModeParam: {configuration.CackleEmoteModeParam} " +
             $"({(configuration.CackleEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
             $"currently active: {IsCackleActive(configuration)}\n" +
+            $"Configured WaterEmoteModeParam: {configuration.WaterEmoteModeParam} " +
+            $"({(configuration.WaterEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
+            $"currently active: {IsWaterActive(configuration)}\n" +
             $"Configured AttentionEmoteModeParam: {configuration.AttentionEmoteModeParam} " +
             $"({(configuration.AttentionEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
             $"currently active: {IsAttentionActive(configuration)}\n" +

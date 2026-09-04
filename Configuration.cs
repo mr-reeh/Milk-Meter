@@ -287,6 +287,32 @@ public sealed class Configuration : IPluginConfiguration
     public int CackleEmoteModeParam { get; set; } = 98;
 
     /// <summary>
+    /// Mirror of CackleDrainBoostEnabled for /water ("Breast Feeding
+    /// Drain"): while active, this dramatically speeds up draining the
+    /// job scale DOWN toward WaterDrainFloorScale instead of growing it
+    /// - same "empty the gauge" mechanic as /cackle, just a second,
+    /// independently-configured emote/rate/floor rather than sharing
+    /// Cackle's. Reverts to normal Passive Scale Gen the instant the
+    /// emote stops, same "stays wherever it ended up" behavior as every
+    /// other looping-emote boost in this file. On by default.
+    /// </summary>
+    public bool WaterDrainBoostEnabled { get; set; } = true;
+
+    /// <summary>How many times faster than normal Passive Scale Gen's rate the drain runs while /water is active. 7x by default, matching CackleDrainRateMultiplier.</summary>
+    public float WaterDrainRateMultiplier { get; set; } = 7.0f;
+
+    /// <summary>
+    /// The floor the /water drain targets - a dedicated value separate
+    /// from both JobCombatFloorScale (Minimum Scaling) and
+    /// CackleDrainFloorScale, which stay used elsewhere. 0.70 by
+    /// default.
+    /// </summary>
+    public float WaterDrainFloorScale { get; set; } = 0.70f;
+
+    /// <summary>The ModeParam value that identifies /water specifically. Confirmed as 75 via /milkmeter emotedebug - see ShakeDrinkEmoteModeParam for the full story on how this kind of value gets found rather than guessed.</summary>
+    public int WaterEmoteModeParam { get; set; } = 75;
+
+    /// <summary>
     /// If true, performing the /attention looping emote wakes the HUD
     /// gauge from its idle fade (see HudGaugeWindow.WakeFromIdle()) -
     /// unlike ShakeDrinkBoostEnabled/CackleDrainBoostEnabled, this does
