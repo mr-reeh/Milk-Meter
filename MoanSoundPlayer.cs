@@ -74,6 +74,22 @@ public sealed class MoanSoundPlayer : IDisposable
         isLooping = true;
     }
 
+    /// <summary>
+    /// Plays the moan sound once, asynchronously (doesn't block the
+    /// caller) - added for the "/milk moan" command, a one-shot use
+    /// case distinct from the threshold effect's StartLooping()/Stop()
+    /// above. NOTE: SoundPlayer can only do one thing at a time per
+    /// instance - calling this while the threshold-effect loop is
+    /// already running (isLooping true) will stop that loop's actual
+    /// playback without clearing the isLooping flag, leaving Stop()
+    /// as a no-op until the threshold effect's own logic re-evaluates
+    /// and calls StartLooping() again. In practice this only matters if
+    /// someone runs the command while already above
+    /// ThresholdEffectMoanSoundThreshold - a rare enough overlap not to
+    /// warrant more elaborate state tracking here.
+    /// </summary>
+    public void Play() => soundPlayer?.Play();
+
     public void Stop()
     {
         if (soundPlayer is null || !isLooping)

@@ -158,6 +158,19 @@ public sealed class Plugin : IDalamudPlugin
     private const double WaterBurstIntervalSeconds = 1.0;
     private double lastWaterBurstTime = -1d;
 
+    // "/milk moan" ramp state - see OnShortCommand and its handling
+    // inside the Job-mode growth/drain block. Progress is tracked as an
+    // accumulated elapsed-seconds float advanced by deltaSeconds each
+    // tick this runs (NOT a wall-clock timestamp diff, unlike the
+    // various burst-interval throttles elsewhere in this file) -
+    // specifically so the ramp genuinely pauses along with everything
+    // else while Configuration.ScalingPaused is true, rather than
+    // jumping forward to "catch up" the instant it's unpaused.
+    private bool moanRampActive;
+    private float moanRampStartScale;
+    private float moanRampElapsedSeconds;
+    private const float MoanRampDurationSeconds = 20f;
+
     // Falling-edge tracker for the Self Sucking auto-attention-swap's
     // burp sound - true once scale has been observed at/below
     // DazedDrainFloorScale, reset to false the moment it's back above
@@ -315,7 +328,10 @@ public sealed class Plugin : IDalamudPlugin
             HelpMessage = "'/milk' alone opens the settings window. 'minimum' eases the job scale toward "
                 + "Minimum Scaling over time; 'maximum' eases it toward Maximum Scaling (Out of Combat) "
                 + "over time - both read whatever those sliders are currently set to, and work regardless "
-                + "of the currently active Scale Source.",
+                + "of the currently active Scale Source. 'moan' plays the moan sound and ramps job scale "
+                + "up to Maximum Scaling (In Combat) over 20 seconds. A plain number (e.g. '1.3') sets job "
+                + "scale directly to that value, clamped between Minimum Scaling and Maximum Scaling (In "
+                + "Combat).",
         });
 
         Framework.Update += OnFrameworkUpdate;
@@ -340,6 +356,7 @@ public sealed class Plugin : IDalamudPlugin
             // damage checks - it just won't be visually apparent
             // unless Job mode is what's currently selected.
             jobCurrentScale = Configuration.JobCombatFloorScale;
+            moanRampActive = false; // an explicit set cancels any in-progress moan ramp
             Log.Information($"[MilkMeter] Easing job scale toward Minimum Scaling ({Configuration.JobCombatFloorScale:F2}).");
             return;
         }
@@ -347,7 +364,45 @@ public sealed class Plugin : IDalamudPlugin
         if (args.Equals("maximum", System.StringComparison.OrdinalIgnoreCase))
         {
             jobCurrentScale = Configuration.JobBaselineScale;
+            moanRampActive = false;
             Log.Information($"[MilkMeter] Easing job scale toward Maximum Scaling - Out of Combat ({Configuration.JobBaselineScale:F2}).");
+            return;
+        }
+
+        if (args.Equals("moan", System.StringComparison.OrdinalIgnoreCase))
+        {
+            // Plays moan.wav once (a one-shot Play(), independent of
+            // the threshold effect's own looping use of the same
+            // player - see MoanSoundPlayer.Play()'s doc comment for the
+            // one edge case that can overlap with), then starts a
+            // 20-second ramp from wherever job scale currently sits up
+            // to Maximum Scaling (In Combat) - see the moanRampActive
+            // handling inside the Job-mode growth/drain block in
+            // OnFrameworkUpdate for the actual per-frame lerp. Re-running
+            // this command while already ramping restarts a fresh
+            // 20-second ramp from the CURRENT scale rather than
+            // stacking or being ignored.
+            moanSoundPlayer.Play();
+            moanRampActive = true;
+            moanRampStartScale = jobCurrentScale;
+            moanRampElapsedSeconds = 0f;
+            Log.Information($"[MilkMeter] Playing moan sound and ramping job scale toward Maximum Scaling - In Combat ({Configuration.JobUpperLimitScale:F2}) over {MoanRampDurationSeconds:F0} seconds.");
+            return;
+        }
+
+        if (float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var requestedScale))
+        {
+            // Direct manual set, clamped between Minimum Scaling and
+            // Maximum Scaling (In Combat) - matches 'minimum'/'maximum'
+            // above in being a plain jobCurrentScale write (same
+            // Mode-agnostic caveat applies: only visually apparent while
+            // Job mode is the active Scale Source), but to an arbitrary
+            // caller-specified value instead of one of the two fixed
+            // presets. Cancels any in-progress moan ramp, same
+            // reasoning as minimum/maximum above.
+            moanRampActive = false;
+            jobCurrentScale = System.Math.Clamp(requestedScale, Configuration.JobCombatFloorScale, Configuration.JobUpperLimitScale);
+            Log.Information($"[MilkMeter] Setting job scale to {jobCurrentScale:F2} (requested {requestedScale:F2}, clamped between Minimum Scaling {Configuration.JobCombatFloorScale:F2} and Maximum Scaling - In Combat {Configuration.JobUpperLimitScale:F2}).");
             return;
         }
 
@@ -1135,11 +1190,37 @@ public sealed class Plugin : IDalamudPlugin
                 // whichever emote stops, everything reverts to normal on the
                 // very next frame - whatever value was reached simply
                 // stays there, it doesn't snap back on its own.
+                // /milk moan takes priority over all three of the above -
+                // see OnShortCommand and moanRampActive's own field
+                // comment for the full story. Checked first since it's
+                // an explicit player command overriding whatever
+                // emote/passive state would otherwise apply, same
+                // "highest priority wins outright" reasoning as dazed
+                // being checked before water below.
                 var dazedDrainActive = Configuration.DazedDrainBoostEnabled && emoteLoopTracker.IsDazedActive(Configuration);
                 var waterDrainActive = Configuration.WaterDrainBoostEnabled && emoteLoopTracker.IsWaterActive(Configuration);
                 var shakeDrinkActive = Configuration.ShakeDrinkBoostEnabled && emoteLoopTracker.IsShakeDrinkActive(Configuration);
 
-                if (dazedDrainActive)
+                if (moanRampActive)
+                {
+                    moanRampElapsedSeconds += deltaSeconds;
+                    var t = System.Math.Clamp(moanRampElapsedSeconds / MoanRampDurationSeconds, 0f, 1f);
+                    jobCurrentScale = moanRampStartScale + (Configuration.JobUpperLimitScale - moanRampStartScale) * t;
+
+                    // Ramp complete - stop advancing it; scale simply
+                    // stays wherever it ended up (Maximum Scaling In
+                    // Combat, barring another mechanic moving it
+                    // afterward), same "holds, doesn't snap back"
+                    // philosophy as every other mechanic in this file.
+                    if (t >= 1f)
+                        moanRampActive = false;
+
+                    // Deliberate, player-driven activity for the full
+                    // 20 seconds - keep the gauge awake throughout, same
+                    // as active shakedrink-boosted growth below.
+                    hudGauge.WakeFromIdle();
+                }
+                else if (dazedDrainActive)
                 {
                     var drainPerSecond = Configuration.PassiveScaleGenPerSecond * Configuration.DazedDrainRateMultiplier;
                     jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.DazedDrainFloorScale, drainPerSecond, deltaSeconds);
@@ -1198,10 +1279,12 @@ public sealed class Plugin : IDalamudPlugin
                 // WaterDrainRateMultiplier, ShakeDrinkGrowthRateMultiplier,
                 // or anything else the way
                 // PassiveScaleGenPerSecond above is. Gated behind
-                // !dazedDrainActive && !waterDrainActive per request, so
+                // !dazedDrainActive && !waterDrainActive && !moanRampActive
+                // per request, so
                 // it can no longer
                 // generate ANY scaling change - positive or negative -
-                // at the same time /dazed's OR /water's own drain is
+                // at the same time /dazed's OR /water's own drain, or
+                // the /milk moan ramp, is
                 // actively
                 // running; previously this ran unconditionally, which
                 // meant a positive value here could partially or fully
@@ -1220,11 +1303,11 @@ public sealed class Plugin : IDalamudPlugin
                 // default, so this has no effect unless explicitly
                 // configured. A negative value here still works AGAINST
                 // ordinary passive growth/shakedrink-boosted growth
-                // above whenever neither drain is active, since both would
+                // above whenever nothing else is active, since both would
                 // be pushing scale in opposite directions within the
                 // same tick - that interaction is unchanged, only the
-                // drain-active cases were fixed.
-                if (!dazedDrainActive && !waterDrainActive)
+                // drain-active/moan-ramp cases were fixed.
+                if (!dazedDrainActive && !waterDrainActive && !moanRampActive)
                 {
                     if (Configuration.ExtraScaleGenPerSecond > 0f)
                         jobCurrentScale = JobScale.ApplyGrowth(jobCurrentScale, Configuration.JobUpperLimitScale, Configuration.ExtraScaleGenPerSecond, deltaSeconds);
