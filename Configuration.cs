@@ -46,8 +46,7 @@ public sealed class Configuration : IPluginConfiguration
     /// ease-toward-target animation, and the Customize+ push itself.
     /// Unlike Enabled above, this deliberately leaves the HUD gauge and
     /// its particle effects still rendering, just dimmed to 10% opacity
-    /// (frozen at exactly 1.0, since pausing via a HUD click always
-    /// resets scale first - see Plugin.ResetScaleToBaselineForPause)
+    /// (frozen at whatever scale was applied at the moment of pausing)
     /// and following the same idle-fade/hover-reveal rules as any other
     /// state rather than being forced fully visible - the point is to
     /// freeze scaling in place

@@ -38,12 +38,11 @@ namespace MilkMeter;
 /// NOTE: unlike an earlier version, the locked state is no longer fully
 /// click-through (NoInputs) - left-clicking the bottle while locked now
 /// toggles Configuration.ScalingPaused, freezing every mechanic that
-/// would modify or push chest scale (and, per a later request, always
-/// resetting scale to exactly 1.0 the instant a click pauses it - see
-/// Plugin.cs's ResetScaleToBaselineForPause and the onPausedByClick
-/// callback below). The gauge itself and its particle
+/// would modify or push chest scale. The gauge itself and its particle
 /// effects keep rendering as before (frozen at whatever scale was
-/// applied at the moment of pausing), but the threshold effect
+/// applied at the moment of pausing - a brief "always reset to 1.0 on
+/// pause" behavior existed here for a short time but was reverted per
+/// request, back to a plain freeze-in-place), but the threshold effect
 /// (vignette, glow, heartbeat sound) completely stops the instant it's
 /// paused, per request - see ThresholdEffectOverlay.Draw() and this
 /// class's own glow block below. This is a real trade-off: the window
@@ -136,7 +135,7 @@ namespace MilkMeter;
 /// match the body), since it moves up and down as the fraction changes.
 /// Barely noticeable except right at 100% full.
 /// </summary>
-public sealed class HudGaugeWindow(Configuration configuration, Func<float> getAppliedScale, Func<bool> getInCombat, Action onPausedByClick)
+public sealed class HudGaugeWindow(Configuration configuration, Func<float> getAppliedScale, Func<bool> getInCombat)
 {
     // Base dimensions at HudScale = 1.0. All multiplied by
     // Configuration.HudScale when actually drawing. Matches the
@@ -303,21 +302,6 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
                 {
                     configuration.ScalingPaused = !configuration.ScalingPaused;
                     configuration.Save();
-
-                    // Only when the click just turned pausing ON (not
-                    // when it turned pausing back off) - per request,
-                    // pausing via the gauge always snaps scale to 1.0
-                    // rather than freezing wherever it happened to be.
-                    // Plugin.cs owns what "scale" actually means (which
-                    // internal field(s) to reset, and pushing the
-                    // change to Customize+ immediately despite the
-                    // per-frame update loop itself being skipped while
-                    // paused) - this window has no access to any of
-                    // that, so it's entirely delegated via this
-                    // callback rather than reaching into Plugin.cs
-                    // internals from here.
-                    if (configuration.ScalingPaused)
-                        onPausedByClick();
                 }
 
                 // Scales this window's font for the rest of the frame's text
