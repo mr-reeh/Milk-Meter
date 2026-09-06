@@ -1,5 +1,6 @@
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Command;
+using Dalamud.Game.Gui.Dtr;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
@@ -27,6 +28,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static IDtrBar DtrBar { get; private set; } = null!;
 
     private const string CommandName = "/milkmeter";
     private const string ShortCommandName = "/milk";
@@ -39,6 +41,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly EmoteLoopTracker emoteLoopTracker;
     private readonly SettingsWindow settingsWindow;
     private readonly HudGaugeWindow hudGauge;
+    private readonly IDtrBarEntry dtrBarEntry;
+    private int lastDtrBarPercent = -1;
     private readonly HeartbeatSoundPlayer heartbeatSoundPlayer;
     private readonly MoanSoundPlayer moanSoundPlayer;
     private readonly BurpSoundPlayer burpSoundPlayer;
@@ -302,6 +306,8 @@ public sealed class Plugin : IDalamudPlugin
         moanSoundPlayer = new MoanSoundPlayer(Log);
         burpSoundPlayer = new BurpSoundPlayer(Log);
         thresholdEffectOverlay = new ThresholdEffectOverlay(Configuration, heartbeatSoundPlayer, moanSoundPlayer);
+        dtrBarEntry = DtrBar.Get("Milk Meter");
+        dtrBarEntry.Shown = Configuration.ShowDtrBarEntry;
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
@@ -600,10 +606,16 @@ public sealed class Plugin : IDalamudPlugin
     private void OnFrameworkUpdate(IFramework framework)
     {
         if (!Configuration.Enabled)
+        {
+            HideDtrBarEntry();
             return;
+        }
 
         if (ObjectTable.LocalPlayer is null)
+        {
+            HideDtrBarEntry();
             return;
+        }
 
         customizePlus.SetCharacterObjectIndex(ObjectTable.LocalPlayer.ObjectIndex);
 
@@ -1343,6 +1355,13 @@ public sealed class Plugin : IDalamudPlugin
             ? targetScale
             : currentAppliedScale + System.Math.Sign(diff) * maxStep;
 
+        // Placed here specifically - after currentAppliedScale is
+        // finalized for this frame, but BEFORE the IPC push throttle's
+        // early-returns below - so the DTR bar text always stays
+        // current every single frame regardless of whether this frame
+        // actually pushes to Customize+.
+        UpdateDtrBarEntry();
+
         // Only the actual IPC push to Customize+ is throttled - the
         // animation state above always stays current.
         var now = ImGuiNowSeconds();
@@ -1384,6 +1403,71 @@ public sealed class Plugin : IDalamudPlugin
 
     /// <summary>The actual scale currently pushed to Customize+ (post-animation), for the settings window's monitor.</summary>
     private float GetAppliedScale() => currentAppliedScale < 0f ? 1f : currentAppliedScale;
+
+    /// <summary>
+    /// Refreshes the DTR (server info bar) entry to show the current
+    /// applied scale as a percentage - Minimum Scaling is 0%, and
+    /// whichever Maximum Scaling currently applies (In Combat or Out of
+    /// Combat, matching the exact same context-dependent ceiling choice
+    /// used for ordinary passive growth elsewhere in this file) is
+    /// 100%, per request. Universal across all three Scale Sources
+    /// (Food/Mana/Job), not just Job mode, since Minimum/Maximum Scaling
+    /// are themselves already treated as global bounds elsewhere in
+    /// this file (the death-reset floor, Extra Scale Gen's drain
+    /// target, and so on all reference them regardless of Mode) rather
+    /// than something Job-mode-specific despite the "Job*" property
+    /// name prefix. Called from OnFrameworkUpdate after
+    /// currentAppliedScale is finalized for the frame but BEFORE the IPC
+    /// push throttle's early-returns, so it stays live every frame
+    /// regardless of whether that frame actually pushes to Customize+ -
+    /// and, since OnFrameworkUpdate itself early-returns the instant
+    /// Configuration.ScalingPaused is true, this naturally freezes at
+    /// its last value while paused too, same as everything else in this
+    /// plugin, with no special-casing needed here. Only actually writes
+    /// to the entry's Text when the rounded percentage changes, to
+    /// avoid needless churn - Shown is still updated unconditionally
+    /// every call, since that's a cheap bool set and the toggle should
+    /// take effect immediately regardless of whether the percentage
+    /// happens to be changing at the same moment.
+    /// </summary>
+    private void UpdateDtrBarEntry()
+    {
+        dtrBarEntry.Shown = Configuration.ShowDtrBarEntry;
+        if (!Configuration.ShowDtrBarEntry)
+            return;
+
+        var ceiling = Condition[ConditionFlag.InCombat] ? Configuration.JobUpperLimitScale : Configuration.JobBaselineScale;
+        var range = ceiling - Configuration.JobCombatFloorScale;
+        var fraction = range > 0f
+            ? (GetAppliedScale() - Configuration.JobCombatFloorScale) / range
+            : 0f;
+        var percent = (int)System.Math.Round(System.Math.Clamp(fraction, 0f, 1f) * 100f);
+
+        if (percent == lastDtrBarPercent)
+            return;
+
+        lastDtrBarPercent = percent;
+        dtrBarEntry.Text = $"Milk: {percent}%";
+        dtrBarEntry.Tooltip = $"Milk Meter: {percent}% (applied scale {GetAppliedScale():F2})";
+    }
+
+    /// <summary>
+    /// Hides the DTR entry outright (rather than leaving it showing a
+    /// stale percentage) for the two early-exit cases in
+    /// OnFrameworkUpdate where nothing about scale is meaningful right
+    /// now: the plugin disabled entirely, or no local player yet
+    /// (logged out/at character select). Resets lastDtrBarPercent back
+    /// to its "never set" sentinel too, so the very next
+    /// UpdateDtrBarEntry() call after either condition clears always
+    /// writes fresh text rather than potentially skipping the write
+    /// because the percentage happens to match whatever was last shown
+    /// before hiding.
+    /// </summary>
+    private void HideDtrBarEntry()
+    {
+        dtrBarEntry.Shown = false;
+        lastDtrBarPercent = -1;
+    }
 
     /// <summary>
     /// Called by HudGaugeWindow the instant the gauge is right-clicked -
@@ -1432,6 +1516,7 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= OnOpenConfigUi;
         CommandManager.RemoveHandler(CommandName);
         CommandManager.RemoveHandler(ShortCommandName);
+        dtrBarEntry.Remove();
         customizePlus.RevertChestScale();
         customizePlus.Dispose();
         heartbeatSoundPlayer.Dispose();

@@ -614,6 +614,17 @@ public sealed class SettingsWindow(
             configuration.Save();
         }
 
+        var showDtrBar = configuration.ShowDtrBarEntry;
+        if (ImGui.Checkbox("Show Server Info Bar Entry", ref showDtrBar))
+        {
+            configuration.ShowDtrBarEntry = showDtrBar;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("Adds a percentage readout to the game's server info bar (top right by " +
+            "default) - Minimum Scaling is 0%, whichever Maximum Scaling currently applies (In or " +
+            "Out of Combat) is 100%. You can still hide or reorder it independently through Dalamud's " +
+            "own server info bar settings even while this is on.");
+
         var showMilkBurst = configuration.ShowMilkBurstEffect;
         if (ImGui.Checkbox("Milk Burst Effect on Reduction", ref showMilkBurst))
         {

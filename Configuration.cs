@@ -567,6 +567,17 @@ public sealed class Configuration : IPluginConfiguration
     public bool ShowHudGauge { get; set; } = true;
 
     /// <summary>
+    /// Whether the DTR (server info bar) entry showing scale as a
+    /// percentage is shown at all. Note per Dalamud's own DTR bar
+    /// design: even when this is true, the actual entry can still be
+    /// hidden/reordered by the user through Dalamud's own settings
+    /// (right-click the server info bar) independently of this toggle -
+    /// this only controls whether Milk Meter registers/shows it at all
+    /// from the plugin's own side. On by default.
+    /// </summary>
+    public bool ShowDtrBarEntry { get; set; } = true;
+
+    /// <summary>
     /// If true, the HUD gauge fades out after HudFadeIdleSeconds of no
     /// genuine "activity" (see HudGaugeWindow.WakeFromIdle() - passive
     /// growth alone deliberately does NOT count, only deliberate-action
