@@ -1,6 +1,7 @@
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Command;
 using Dalamud.Game.Gui.Dtr;
+using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
@@ -1425,10 +1426,18 @@ public sealed class Plugin : IDalamudPlugin
     /// its last value while paused too, same as everything else in this
     /// plugin, with no special-casing needed here. Only actually writes
     /// to the entry's Text when the rounded percentage changes, to
-    /// avoid needless churn - Shown is still updated unconditionally
+    /// avoid needless SeString-rebuild churn - Shown is still updated
+    /// unconditionally
     /// every call, since that's a cheap bool set and the toggle should
     /// take effect immediately regardless of whether the percentage
-    /// happens to be changing at the same moment.
+    /// happens to be changing at the same moment. IDtrBarEntry.Text/
+    /// Tooltip are typed SeString?, not plain string, and SeString has
+    /// NO implicit conversion from string - an earlier version of this
+    /// method assigned a plain interpolated string directly, which
+    /// compiled but rendered as blank in-game; fixed to build via
+    /// SeStringBuilder().AddText(...).Build() instead, the documented
+    /// way to construct one, confirmed working via the equivalent code
+    /// in this author's other plugin (Hunger Meter).
     /// </summary>
     private void UpdateDtrBarEntry()
     {
@@ -1447,8 +1456,8 @@ public sealed class Plugin : IDalamudPlugin
             return;
 
         lastDtrBarPercent = percent;
-        dtrBarEntry.Text = $"Milk: {percent}%";
-        dtrBarEntry.Tooltip = $"Milk Meter: {percent}% (applied scale {GetAppliedScale():F2})";
+        dtrBarEntry.Text = new SeStringBuilder().AddText($"Milk: {percent}%").Build();
+        dtrBarEntry.Tooltip = new SeStringBuilder().AddText($"Milk Meter: {percent}% (applied scale {GetAppliedScale():F2})").Build();
     }
 
     /// <summary>
