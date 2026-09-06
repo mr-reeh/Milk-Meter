@@ -620,11 +620,12 @@ public sealed class SettingsWindow(
             configuration.ShowDtrBarEntry = showDtrBar;
             configuration.Save();
         }
-        ImGui.TextDisabled("Adds a percentage readout to the game's server info bar (top right by " +
-            "default) - Minimum Scaling to Maximum Scaling (Out of Combat) maps onto 0%-100%, and " +
-            "Maximum Scaling (Out of Combat) to Maximum Scaling (In Combat) maps onto 100%-200%, so it " +
-            "can climb above 100% while in combat. You can still hide or reorder it independently " +
-            "through Dalamud's own server info bar settings even while this is on.");
+        ImGui.TextDisabled("Adds a single combined readout to the game's server info bar (top right by " +
+            "default) covering both meters: \"Food: X% | Milk: Y%\" - Food is the waist/hunger meter " +
+            "(see /hungermeter or /food for its own settings), Milk is this window's breast scale. Each " +
+            "half maps Minimum-Maximum onto 0%-200% independently (own three sliders each) - Milk's can " +
+            "climb above 100% while in combat. You can still hide or reorder the whole entry " +
+            "independently through Dalamud's own server info bar settings even while this is on.");
 
         var showMilkBurst = configuration.ShowMilkBurstEffect;
         if (ImGui.Checkbox("Milk Burst Effect on Reduction", ref showMilkBurst))

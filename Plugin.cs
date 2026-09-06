@@ -16,6 +16,27 @@ namespace MilkMeter;
 /// "how big is your chest right now" question can be answered by a food
 /// buff timer, MP, or (see JobScale.cs) a job-relevant mechanic that
 /// differs by role, instead of only reading MP.
+///
+/// MERGED FEATURE: waist/hunger scaling, previously its own standalone
+/// plugin (Hunger Meter, by the same author). The two plugins running
+/// side by side turned out to conflict with each other over Customize+ -
+/// each independently pushed its own temporary profile (this one for
+/// the chest bones, Hunger Meter for the waist bone), and Customize+'s
+/// temporary-profile API appears to fully REPLACE the resolved bone set
+/// while active rather than merge per-bone across different pushers -
+/// so whichever plugin pushed most recently would silently blank out
+/// the other's edit. Merging Hunger Meter's logic directly into this
+/// plugin (WaistScale.cs, HungerSettingsWindow.cs, the waist-related
+/// Configuration properties, and CustomizePlusIpc.SetScales pushing
+/// both bones together in one call) fixes this at the root: one
+/// process, one combined push, no second independent pusher to race
+/// against. The waist/hunger feature keeps its own dedicated settings
+/// window (opened via /hungermeter or /food, not /milkmeter or /milk)
+/// and its own independent pause toggle (Configuration.WaistScalingPaused,
+/// separate from Configuration.ScalingPaused which only affects
+/// breast scaling) - per request, the two meters are otherwise
+/// unrelated feature sets that happen to share a process (and, now, a
+/// single combined DTR bar entry - see UpdateDtrBarEntry).
 /// </summary>
 public sealed class Plugin : IDalamudPlugin
 {
@@ -33,6 +54,8 @@ public sealed class Plugin : IDalamudPlugin
 
     private const string CommandName = "/milkmeter";
     private const string ShortCommandName = "/milk";
+    private const string HungerCommandName = "/hungermeter";
+    private const string FoodCommandName = "/food";
 
     public Configuration Configuration { get; }
     private readonly CustomizePlusIpc customizePlus;
@@ -41,13 +64,30 @@ public sealed class Plugin : IDalamudPlugin
     private readonly JobBuffTracker jobTracker;
     private readonly EmoteLoopTracker emoteLoopTracker;
     private readonly SettingsWindow settingsWindow;
+    private readonly HungerSettingsWindow hungerSettingsWindow;
     private readonly HudGaugeWindow hudGauge;
     private readonly IDtrBarEntry dtrBarEntry;
     private int lastDtrBarPercent = -1;
+    private int lastDtrBarWaistPercent = -1;
     private readonly HeartbeatSoundPlayer heartbeatSoundPlayer;
     private readonly MoanSoundPlayer moanSoundPlayer;
     private readonly BurpSoundPlayer burpSoundPlayer;
     private readonly ThresholdEffectOverlay thresholdEffectOverlay;
+
+    // Waist/hunger edge-detection state, entirely separate from
+    // anything the breast-scale Food Scale Source uses (that one is a
+    // continuous function of remaining time, not an event) - a rising
+    // edge of the SAME Well Fed status (shared foodTracker instance)
+    // counts as "food consumed" for the waist accumulator specifically.
+    // See OnFrameworkUpdate's waist block and WaistScale.ApplyFoodConsumed.
+    private bool lastFoodBuffActiveForWaist;
+    private float? lastRemainingSecondsForWaist;
+
+    // Separate from lastPushedScale (chest) - both are checked together
+    // in the combined push at the end of OnFrameworkUpdate now that
+    // CustomizePlusIpc.SetScales pushes both bones in one call. -1f is
+    // the same "never pushed yet" sentinel lastPushedScale already uses.
+    private float lastPushedWaistScale = -1f;
 
     // Only push an update to Customize+ when the applied scale actually
     // changes by a meaningful amount, and at most several times a second
@@ -289,6 +329,18 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
 
+        // Seed the waist accumulator on first-ever run (or from a
+        // pre-merge config that's never seen this field) from the
+        // configured baseline - see Configuration.CurrentWaistScale's
+        // own doc comment for why NaN (not a hardcoded 1.0f) is the
+        // sentinel checked here. Mirrors the standalone Hunger Meter
+        // plugin's own identical seeding step before it was merged in.
+        if (float.IsNaN(Configuration.CurrentWaistScale))
+        {
+            Configuration.CurrentWaistScale = Configuration.WaistBaselineScale;
+            Configuration.Save();
+        }
+
         customizePlus = new CustomizePlusIpc(PluginInterface, Log);
         foodTracker = new FoodBuffTracker(ObjectTable, Configuration);
         manaTracker = new ManaTracker(ObjectTable);
@@ -302,6 +354,12 @@ public sealed class Plugin : IDalamudPlugin
             () => manaTracker.GetManaFraction(),
             jobTracker.GetTrackedAbilityDisplayName,
             () => (Condition[ConditionFlag.InCombat], jobCurrentScale));
+        hungerSettingsWindow = new HungerSettingsWindow(
+            Configuration,
+            () => Configuration.CurrentWaistScale,
+            () => lastPushedWaistScale,
+            () => foodTracker.GetFoodBuffState(),
+            ResetWaistToBaseline);
         hudGauge = new HudGaugeWindow(Configuration, GetAppliedScale, () => Condition[ConditionFlag.InCombat], ResetScaleToBaseline);
         heartbeatSoundPlayer = new HeartbeatSoundPlayer(Log);
         moanSoundPlayer = new MoanSoundPlayer(Log);
@@ -329,7 +387,8 @@ public sealed class Plugin : IDalamudPlugin
                 + "live Y-position/threshold info for tuning JumpVelocityThreshold if jumps are being "
                 + "missed or over-triggered. 'dtrdebug' prints the server info bar entry's current "
                 + "computed percentage, Shown state, and inputs, for diagnosing why it might not be "
-                + "displaying.",
+                + "displaying. See also '/hungermeter' (or its short form '/food') for the separate "
+                + "waist/hunger meter's own settings window.",
         });
 
         CommandManager.AddHandler(ShortCommandName, new CommandInfo(OnShortCommand)
@@ -343,12 +402,55 @@ public sealed class Plugin : IDalamudPlugin
                 + "Combat).",
         });
 
+        CommandManager.AddHandler(HungerCommandName, new CommandInfo(OnHungerCommand)
+        {
+            HelpMessage = "'/hungermeter' toggles the Food/Hunger settings window. 'status' prints the "
+                + "current waist scale. 'reset' resets waist scale to Baseline. This is a SEPARATE meter "
+                + "from breast scaling above - see /milkmeter for that one.",
+        });
+
+        CommandManager.AddHandler(FoodCommandName, new CommandInfo(OnHungerCommand)
+        {
+            HelpMessage = "Alias for /hungermeter.",
+        });
+
         Framework.Update += OnFrameworkUpdate;
         PluginInterface.UiBuilder.Draw += settingsWindow.Draw;
+        PluginInterface.UiBuilder.Draw += hungerSettingsWindow.Draw;
         PluginInterface.UiBuilder.Draw += hudGauge.Draw;
         PluginInterface.UiBuilder.Draw += DrawThresholdEffect;
         PluginInterface.UiBuilder.OpenConfigUi += OnOpenConfigUi;
     }
+
+    private void OnHungerCommand(string command, string args)
+    {
+        args = args.Trim();
+
+        if (args.Equals("status", System.StringComparison.OrdinalIgnoreCase))
+        {
+            Log.Information($"[MilkMeter] Current waist scale: {Configuration.CurrentWaistScale:F3} " +
+                $"(applied: {lastPushedWaistScale:F3})");
+            return;
+        }
+
+        if (args.Equals("reset", System.StringComparison.OrdinalIgnoreCase))
+        {
+            ResetWaistToBaseline();
+            return;
+        }
+
+        hungerSettingsWindow.IsOpen = !hungerSettingsWindow.IsOpen;
+    }
+
+    private void ResetWaistToBaseline()
+    {
+        Configuration.CurrentWaistScale = Configuration.WaistBaselineScale;
+        Configuration.LastUpdateUnixSeconds = NowUnixSeconds();
+        Configuration.Save();
+    }
+
+    private static double NowUnixSeconds() => System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
+
 
     private void OnShortCommand(string command, string args)
     {
@@ -440,22 +542,37 @@ public sealed class Plugin : IDalamudPlugin
 
         if (args.Equals("dtrdebug", System.StringComparison.OrdinalIgnoreCase))
         {
-            var percent = JobScale.ComputePercent(
+            var milkPercent = ScalePercent.ComputeTwoSegmentPercent(
                 GetAppliedScale(),
                 Configuration.JobCombatFloorScale,
                 Configuration.JobBaselineScale,
                 Configuration.JobUpperLimitScale);
-            var roundedPercent = (int)System.Math.Round(percent);
+            var roundedMilkPercent = (int)System.Math.Round(milkPercent);
 
-            Log.Information("[MilkMeter] DTR bar debug info:\n" +
+            var foodPercent = ScalePercent.ComputeTwoSegmentPercent(
+                Configuration.CurrentWaistScale,
+                Configuration.WaistMinScale,
+                Configuration.WaistBaselineScale,
+                Configuration.WaistMaxScale);
+            var roundedFoodPercent = (int)System.Math.Round(foodPercent);
+
+            Log.Information("[MilkMeter] DTR bar debug info (single combined entry, \"Food: X% | Milk: Y%\"):\n" +
                 $"ShowDtrBarEntry: {Configuration.ShowDtrBarEntry}\n" +
                 $"dtrBarEntry.Shown (actual current value read back from Dalamud): {dtrBarEntry.Shown}\n" +
+                $"--- Milk (breast) half ---\n" +
                 $"GetAppliedScale(): {GetAppliedScale():F3}\n" +
                 $"JobCombatFloorScale (0%): {Configuration.JobCombatFloorScale:F2}, " +
                 $"JobBaselineScale (100%): {Configuration.JobBaselineScale:F2}, " +
                 $"JobUpperLimitScale (200%): {Configuration.JobUpperLimitScale:F2}\n" +
-                $"Computed percent this instant: {percent:F1} (rounded to {roundedPercent}), " +
+                $"Computed percent this instant: {milkPercent:F1} (rounded to {roundedMilkPercent}), " +
                 $"lastDtrBarPercent (last one actually written): {lastDtrBarPercent}\n" +
+                $"--- Food (waist) half ---\n" +
+                $"Configuration.CurrentWaistScale: {Configuration.CurrentWaistScale:F3}\n" +
+                $"WaistMinScale (0%): {Configuration.WaistMinScale:F2}, " +
+                $"WaistBaselineScale (100%): {Configuration.WaistBaselineScale:F2}, " +
+                $"WaistMaxScale (200%): {Configuration.WaistMaxScale:F2}\n" +
+                $"Computed percent this instant: {foodPercent:F1} (rounded to {roundedFoodPercent}), " +
+                $"lastDtrBarWaistPercent (last one actually written): {lastDtrBarWaistPercent}\n" +
                 "If ShowDtrBarEntry/Shown are both true here but the bar still shows nothing in-game, " +
                 "that points to a Dalamud-side display/registration issue (try a full game restart, not " +
                 "just a plugin reload) rather than a computation problem on this end.");
@@ -620,9 +737,13 @@ public sealed class Plugin : IDalamudPlugin
             // Give the profile back its un-modified state instead of
             // freezing it at whatever scale it last had, and reset the
             // animation so re-enabling eases in fresh from neutral rather
-            // than jumping back to wherever it left off.
-            customizePlus.RevertChestScale();
+            // than jumping back to wherever it left off. Affects BOTH
+            // chest and waist now that RevertScales() removes the whole
+            // combined temporary profile in one call - lastPushedWaistScale
+            // is reset alongside lastPushedScale for the same reason.
+            customizePlus.RevertScales();
             lastPushedScale = -1f;
+            lastPushedWaistScale = -1f;
             currentAppliedScale = -1f;
             jobCurrentScale = Configuration.JobBaselineScale;
         }
@@ -645,6 +766,67 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         customizePlus.SetCharacterObjectIndex(ObjectTable.LocalPlayer.ObjectIndex);
+
+        // --- Waist/hunger accumulator (merged from the standalone
+        // Hunger Meter plugin) - deliberately placed here, BEFORE the
+        // breast-scale ScalingPaused early-return further down, so
+        // pausing breast scaling does NOT also freeze waist tracking;
+        // per request, the two meters pause independently
+        // (WaistScalingPaused below vs ScalingPaused further down).
+        // Uses real wall-clock time (NowUnixSeconds), not
+        // ImGuiNowSeconds()'s monotonic stopwatch, since decay needs to
+        // account for real time elapsed even across a full game
+        // restart - see Configuration.LastUpdateUnixSeconds's own doc
+        // comment.
+        var nowUnix = NowUnixSeconds();
+        var elapsedWaistSeconds = Configuration.LastUpdateUnixSeconds is { } lastUnix ? nowUnix - lastUnix : 0d;
+        Configuration.LastUpdateUnixSeconds = nowUnix;
+
+        // Edge detection for "a food item was just consumed" - two
+        // distinct edges both count, mirroring the standalone Hunger
+        // Meter plugin's own identical logic exactly: the buff
+        // transitioning from not-active to active (first bite), or the
+        // buff already being active and RemainingSeconds jumping UP
+        // compared to last frame (eating a second item while still
+        // buffed, refreshing/extending the timer) - remaining time only
+        // ever counts down on its own, so any rise can only mean a new
+        // food item was just consumed. Uses the SAME foodTracker
+        // instance the breast-scale Food Scale Source above already
+        // reads, just with its own separate edge-detection fields,
+        // since that mode needs a continuous taper function instead of
+        // a discrete consumed event.
+        var (foodActiveForWaist, remainingForWaist) = foodTracker.GetFoodBuffState();
+        var waistConsumedEdge = (foodActiveForWaist && !lastFoodBuffActiveForWaist)
+            || (foodActiveForWaist && lastFoodBuffActiveForWaist
+                && remainingForWaist is { } rw && lastRemainingSecondsForWaist is { } lastRw && rw > lastRw + 1f);
+
+        lastFoodBuffActiveForWaist = foodActiveForWaist;
+        lastRemainingSecondsForWaist = remainingForWaist;
+
+        if (!Configuration.WaistScalingPaused)
+        {
+            if (elapsedWaistSeconds > 0d)
+            {
+                Configuration.CurrentWaistScale = WaistScale.ApplyDecay(
+                    Configuration.CurrentWaistScale,
+                    Configuration.WaistMinScale,
+                    Configuration.WaistReductionPerHour,
+                    elapsedWaistSeconds);
+            }
+
+            if (waistConsumedEdge)
+            {
+                Configuration.CurrentWaistScale = WaistScale.ApplyFoodConsumed(
+                    Configuration.CurrentWaistScale,
+                    Configuration.WaistMaxScale,
+                    Configuration.WaistIncreasePerFood);
+            }
+
+            // Defensive re-clamp in case Min/Max were edited at runtime
+            // to a range that no longer contains the current value.
+            Configuration.CurrentWaistScale = WaistScale.Clamp(
+                Configuration.CurrentWaistScale, Configuration.WaistMinScale, Configuration.WaistMaxScale);
+        }
 
         // Tracked unconditionally, every tick, regardless of Mode or
         // whether /dazed is active - see lastAboveDazedDrainFloorTime's
@@ -1406,16 +1588,36 @@ public sealed class Plugin : IDalamudPlugin
         UpdateDtrBarEntry();
 
         // Only the actual IPC push to Customize+ is throttled - the
-        // animation state above always stays current.
+        // animation state above always stays current, and the waist
+        // accumulator above updates every frame regardless too (that's
+        // its own independent value, not something eased frame-to-frame
+        // the way currentAppliedScale is - see the merged-in waist
+        // block near the top of this method).
+        //
+        // Combined push, per the fix described in Plugin.cs's class doc
+        // comment and CustomizePlusIpc.SetScales: pushes BOTH chest and
+        // waist scale in one call, so it fires if EITHER meter's value
+        // moved enough (or either has never been pushed at all yet -
+        // the same -1f "never pushed" sentinel lastPushedScale already
+        // used, now also applied to lastPushedWaistScale), not just
+        // chest alone. forceImmediate itself remains chest-specific
+        // (set by breast-scale events like the food buff appearing or a
+        // tracked job mechanic changing - see where it's set further up
+        // this method) - there's no waist equivalent, since the waist
+        // accumulator doesn't have discrete "should ignore the throttle
+        // for this one" moments the same way.
         var now = ImGuiNowSeconds();
-        if (!forceImmediate && now - lastPushTime < MinSecondsBetweenPushes)
+        var firstEverPush = lastPushedScale < 0f || lastPushedWaistScale < 0f;
+        var chestDeltaBigEnough = System.Math.Abs(currentAppliedScale - lastPushedScale) >= MinScaleDelta;
+        var waistDeltaBigEnough = System.Math.Abs(Configuration.CurrentWaistScale - lastPushedWaistScale) >= MinScaleDelta;
+        var dueForPush = now - lastPushTime >= MinSecondsBetweenPushes;
+
+        if (!forceImmediate && !firstEverPush && !(dueForPush && (chestDeltaBigEnough || waistDeltaBigEnough)))
             return;
 
-        if (!forceImmediate && lastPushedScale >= 0f && System.Math.Abs(currentAppliedScale - lastPushedScale) < MinScaleDelta)
-            return;
-
-        customizePlus.SetChestScale(currentAppliedScale);
+        customizePlus.SetScales(currentAppliedScale, Configuration.CurrentWaistScale);
         lastPushedScale = currentAppliedScale;
+        lastPushedWaistScale = Configuration.CurrentWaistScale;
         lastPushTime = now;
     }
 
@@ -1448,42 +1650,39 @@ public sealed class Plugin : IDalamudPlugin
     private float GetAppliedScale() => currentAppliedScale < 0f ? 1f : currentAppliedScale;
 
     /// <summary>
-    /// Refreshes the DTR (server info bar) entry to show the current
-    /// applied scale as a percentage, via JobScale.ComputePercent - per
-    /// request, Minimum Scaling to Maximum Scaling (Out of Combat) maps
-    /// onto 0%-100%, and Maximum Scaling (Out of Combat) to Maximum
-    /// Scaling (In Combat) maps onto 100%-200% (previously this only
-    /// used whichever ceiling currently applied for a single 0%-100%
-    /// range - replaced with the two-segment version since scale can
-    /// legitimately exceed Maximum Scaling (Out of Combat) while in
-    /// combat, which needs to show as MORE than 100%, not get capped
-    /// there). Universal across all three Scale Sources
-    /// (Food/Mana/Job), not just Job mode, since Minimum/Maximum Scaling
-    /// are themselves already treated as global bounds elsewhere in
-    /// this file (the death-reset floor, Extra Scale Gen's drain
-    /// target, and so on all reference them regardless of Mode) rather
-    /// than something Job-mode-specific despite the "Job*" property
-    /// name prefix. Called from OnFrameworkUpdate after
+    /// Refreshes the DTR (server info bar) entry to show a single
+    /// COMBINED string covering both meters this plugin tracks, per
+    /// request: "Food: X% | Milk: Y%" - Food (waist) percentage first,
+    /// then Milk (breast) percentage, in that exact order. Each half
+    /// uses ScalePercent.ComputeTwoSegmentPercent against its own
+    /// meter's three sliders (Minimum/Baseline/Maximum for waist,
+    /// Minimum/Maximum-Out-of-Combat/Maximum-In-Combat for breast) - see
+    /// that method's own doc comment for the shared two-segment shape.
+    /// There is only ONE entry/toggle for both halves
+    /// (Configuration.ShowDtrBarEntry) - no separate per-meter DTR
+    /// toggle, per request. Called from OnFrameworkUpdate after
     /// currentAppliedScale is finalized for the frame but BEFORE the IPC
     /// push throttle's early-returns, so it stays live every frame
     /// regardless of whether that frame actually pushes to Customize+ -
     /// and, since OnFrameworkUpdate itself early-returns the instant
-    /// Configuration.ScalingPaused is true, this naturally freezes at
-    /// its last value while paused too, same as everything else in this
-    /// plugin, with no special-casing needed here. Only actually writes
-    /// to the entry's Text when the rounded percentage changes, to
-    /// avoid needless SeString-rebuild churn - Shown is still updated
-    /// unconditionally
-    /// every call, since that's a cheap bool set and the toggle should
-    /// take effect immediately regardless of whether the percentage
-    /// happens to be changing at the same moment. IDtrBarEntry.Text/
-    /// Tooltip are typed SeString?, not plain string, and SeString has
-    /// NO implicit conversion from string - an earlier version of this
-    /// method assigned a plain interpolated string directly, which
-    /// compiled but rendered as blank in-game; fixed to build via
+    /// Configuration.ScalingPaused is true, the MILK half naturally
+    /// freezes at its last value while breast scaling is paused (the
+    /// FOOD half keeps updating regardless, since the waist accumulator
+    /// block sits before that early-return - see OnFrameworkUpdate's
+    /// class doc comment for why the two meters pause independently).
+    /// Only actually rebuilds the SeString when EITHER rounded
+    /// percentage changes, to avoid needless SeString-rebuild churn -
+    /// Shown is still updated unconditionally every call, since that's a
+    /// cheap bool set and the toggle should take effect immediately
+    /// regardless of whether either percentage happens to be changing at
+    /// the same moment. IDtrBarEntry.Text/Tooltip are typed SeString?,
+    /// not plain string, and SeString has NO implicit conversion from
+    /// string - an earlier version of this method assigned a plain
+    /// interpolated string directly, which compiled but rendered as
+    /// blank in-game; fixed to build via
     /// SeStringBuilder().AddText(...).Build() instead, the documented
     /// way to construct one, confirmed working via the equivalent code
-    /// in this author's other plugin (Hunger Meter).
+    /// in this author's other (now-merged) plugin, Hunger Meter.
     /// </summary>
     private void UpdateDtrBarEntry()
     {
@@ -1491,18 +1690,27 @@ public sealed class Plugin : IDalamudPlugin
         if (!Configuration.ShowDtrBarEntry)
             return;
 
-        var percent = (int)System.Math.Round(JobScale.ComputePercent(
+        var milkPercent = (int)System.Math.Round(ScalePercent.ComputeTwoSegmentPercent(
             GetAppliedScale(),
             Configuration.JobCombatFloorScale,
             Configuration.JobBaselineScale,
             Configuration.JobUpperLimitScale));
 
-        if (percent == lastDtrBarPercent)
+        var foodPercent = (int)System.Math.Round(ScalePercent.ComputeTwoSegmentPercent(
+            Configuration.CurrentWaistScale,
+            Configuration.WaistMinScale,
+            Configuration.WaistBaselineScale,
+            Configuration.WaistMaxScale));
+
+        if (milkPercent == lastDtrBarPercent && foodPercent == lastDtrBarWaistPercent)
             return;
 
-        lastDtrBarPercent = percent;
-        dtrBarEntry.Text = new SeStringBuilder().AddText($"Milk: {percent}%").Build();
-        dtrBarEntry.Tooltip = new SeStringBuilder().AddText($"Milk Meter: {percent}% (applied scale {GetAppliedScale():F2})").Build();
+        lastDtrBarPercent = milkPercent;
+        lastDtrBarWaistPercent = foodPercent;
+        dtrBarEntry.Text = new SeStringBuilder().AddText($"Food: {foodPercent}% | Milk: {milkPercent}%").Build();
+        dtrBarEntry.Tooltip = new SeStringBuilder().AddText(
+            $"Milk Meter: Food (waist) {foodPercent}% (applied scale {Configuration.CurrentWaistScale:F2}), " +
+            $"Milk (breast) {milkPercent}% (applied scale {GetAppliedScale():F2})").Build();
     }
 
     /// <summary>
@@ -1510,17 +1718,18 @@ public sealed class Plugin : IDalamudPlugin
     /// stale percentage) for the two early-exit cases in
     /// OnFrameworkUpdate where nothing about scale is meaningful right
     /// now: the plugin disabled entirely, or no local player yet
-    /// (logged out/at character select). Resets lastDtrBarPercent back
-    /// to its "never set" sentinel too, so the very next
-    /// UpdateDtrBarEntry() call after either condition clears always
-    /// writes fresh text rather than potentially skipping the write
-    /// because the percentage happens to match whatever was last shown
-    /// before hiding.
+    /// (logged out/at character select). Resets both lastDtrBarPercent
+    /// and lastDtrBarWaistPercent back to their "never set" sentinel
+    /// too, so the very next UpdateDtrBarEntry() call after either
+    /// condition clears always writes fresh combined text rather than
+    /// potentially skipping the write because BOTH halves happen to
+    /// match whatever was last shown before hiding.
     /// </summary>
     private void HideDtrBarEntry()
     {
         dtrBarEntry.Shown = false;
         lastDtrBarPercent = -1;
+        lastDtrBarWaistPercent = -1;
     }
 
     /// <summary>
@@ -1551,10 +1760,17 @@ public sealed class Plugin : IDalamudPlugin
         moanRampActive = false;
         jobCurrentScale = 1.0f;
         currentAppliedScale = 1.0f;
-        customizePlus.SetChestScale(1.0f);
+        // Waist scale is intentionally left untouched here - this reset
+        // is specifically the breast-only right-click action (see
+        // HudGaugeWindow's onRightClicked callback), not a reset of the
+        // waist meter, so the combined push carries forward whatever
+        // Configuration.CurrentWaistScale currently is rather than
+        // resetting that too.
+        customizePlus.SetScales(1.0f, Configuration.CurrentWaistScale);
         lastPushedScale = 1.0f;
+        lastPushedWaistScale = Configuration.CurrentWaistScale;
         lastPushTime = ImGuiNowSeconds();
-        Log.Information("[MilkMeter] Gauge right-clicked - scale reset to 1.0.");
+        Log.Information("[MilkMeter] Gauge right-clicked - breast scale reset to 1.0.");
     }
 
 
@@ -1565,13 +1781,16 @@ public sealed class Plugin : IDalamudPlugin
     {
         Framework.Update -= OnFrameworkUpdate;
         PluginInterface.UiBuilder.Draw -= settingsWindow.Draw;
+        PluginInterface.UiBuilder.Draw -= hungerSettingsWindow.Draw;
         PluginInterface.UiBuilder.Draw -= hudGauge.Draw;
         PluginInterface.UiBuilder.Draw -= DrawThresholdEffect;
         PluginInterface.UiBuilder.OpenConfigUi -= OnOpenConfigUi;
         CommandManager.RemoveHandler(CommandName);
         CommandManager.RemoveHandler(ShortCommandName);
+        CommandManager.RemoveHandler(HungerCommandName);
+        CommandManager.RemoveHandler(FoodCommandName);
         dtrBarEntry.Remove();
-        customizePlus.RevertChestScale();
+        customizePlus.RevertScales();
         customizePlus.Dispose();
         heartbeatSoundPlayer.Dispose();
         moanSoundPlayer.Dispose();

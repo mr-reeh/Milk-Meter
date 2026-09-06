@@ -1,0 +1,125 @@
+using System;
+using System.Numerics;
+using Dalamud.Bindings.ImGui;
+
+namespace MilkMeter;
+
+/// <summary>
+/// Configuration + live monitoring window for the waist/hunger meter -
+/// merged in from the standalone Hunger Meter plugin (see Plugin.cs's
+/// class doc comment for why), opened via /hungermeter or /food rather
+/// than /milkmeter or /milk, and kept entirely separate from
+/// SettingsWindow.cs (the original breast-scale settings window) rather
+/// than combined into one - the two meters are independently paused
+/// (Configuration.WaistScalingPaused vs Configuration.ScalingPaused) and
+/// otherwise unrelated feature sets, so a shared window would mostly
+/// just be two unrelated sections stacked in one place for no real
+/// benefit. Same ImGui Begin/End/SliderFloat pattern as the original
+/// Hunger Meter's own SettingsWindow.cs, stripped down to just this
+/// meter's five sliders plus a status readout - no Enabled checkbox
+/// here (that's the shared master switch, Configuration.Enabled, which
+/// still only lives in the main settings window) and no server-info-bar
+/// toggle here (the DTR entry is a single COMBINED one now, shown/hidden
+/// by Configuration.ShowDtrBarEntry in the main settings window, not a
+/// separate per-meter toggle).
+/// </summary>
+public sealed class HungerSettingsWindow(
+    Configuration configuration,
+    Func<float> getCurrentWaistScale,
+    Func<float> getAppliedWaistScale,
+    Func<(bool Active, float? RemainingSeconds)> getFoodState,
+    Action resetWaistToBaseline)
+{
+    public bool IsOpen;
+
+    public void Draw()
+    {
+        if (!IsOpen)
+            return;
+
+        ImGui.SetNextWindowSize(new Vector2(400, 380), ImGuiCond.FirstUseEver);
+
+        if (!ImGui.Begin("Milk Meter - Food/Hunger Settings", ref IsOpen))
+        {
+            ImGui.End();
+            return;
+        }
+
+        var scalingPaused = configuration.WaistScalingPaused;
+        if (ImGui.Checkbox("Scaling Paused", ref scalingPaused))
+        {
+            configuration.WaistScalingPaused = scalingPaused;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("Freezes decay and food-consumed increases in place - independent of the " +
+            "main Milk Meter window's own pause, which only affects breast scaling.");
+
+        ImGui.Separator();
+        ImGui.Text("Waist Scaling Range");
+
+        var minScale = configuration.WaistMinScale;
+        if (ImGui.SliderFloat("Minimum Waist Scaling", ref minScale, 0.10f, 2.00f, "%.2f"))
+        {
+            if (minScale > configuration.WaistMaxScale)
+                minScale = configuration.WaistMaxScale;
+            configuration.WaistMinScale = minScale;
+            configuration.CurrentWaistScale = WaistScale.Clamp(configuration.CurrentWaistScale, configuration.WaistMinScale, configuration.WaistMaxScale);
+            configuration.Save();
+        }
+
+        var baselineScale = configuration.WaistBaselineScale;
+        if (ImGui.SliderFloat("Baseline Waist Scale", ref baselineScale, 0.10f, 2.00f, "%.2f"))
+        {
+            configuration.WaistBaselineScale = baselineScale;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("Only used as the starting value on first run, and by the Reset button below - " +
+            "not a value scaling is pulled toward. Also the midpoint of the DTR bar's percentage mapping " +
+            "(0% at Minimum, 100% here, 200% at Maximum).");
+
+        var maxScale = configuration.WaistMaxScale;
+        if (ImGui.SliderFloat("Maximum Waist Scaling", ref maxScale, 0.10f, 3.00f, "%.2f"))
+        {
+            if (maxScale < configuration.WaistMinScale)
+                maxScale = configuration.WaistMinScale;
+            configuration.WaistMaxScale = maxScale;
+            configuration.CurrentWaistScale = WaistScale.Clamp(configuration.CurrentWaistScale, configuration.WaistMinScale, configuration.WaistMaxScale);
+            configuration.Save();
+        }
+
+        ImGui.Separator();
+        ImGui.Text("Rates");
+
+        var increasePerFood = configuration.WaistIncreasePerFood;
+        if (ImGui.SliderFloat("Scaling Increase Per Food Eaten", ref increasePerFood, 0.00f, 1.00f, "%.2f"))
+        {
+            configuration.WaistIncreasePerFood = increasePerFood;
+            configuration.Save();
+        }
+
+        var reductionPerHour = configuration.WaistReductionPerHour;
+        if (ImGui.SliderFloat("Scaling Reduction Per Hour", ref reductionPerHour, 0.00f, 1.00f, "%.2f"))
+        {
+            configuration.WaistReductionPerHour = reductionPerHour;
+            configuration.Save();
+        }
+
+        ImGui.Separator();
+        ImGui.Text("Status");
+
+        var current = getCurrentWaistScale();
+        var applied = getAppliedWaistScale();
+        var percent = ScalePercent.ComputeTwoSegmentPercent(current, configuration.WaistMinScale, configuration.WaistBaselineScale, configuration.WaistMaxScale);
+        ImGui.Text($"Current scale: {current:F3} ({percent:F0}%)  (applied to Customize+: {applied:F3})");
+
+        var (foodActive, remaining) = getFoodState();
+        ImGui.Text(foodActive
+            ? $"Well Fed: active ({remaining:F0}s remaining)"
+            : "Well Fed: not active");
+
+        if (ImGui.Button("Reset to Baseline"))
+            resetWaistToBaseline();
+
+        ImGui.End();
+    }
+}

@@ -573,9 +573,87 @@ public sealed class Configuration : IPluginConfiguration
     /// hidden/reordered by the user through Dalamud's own settings
     /// (right-click the server info bar) independently of this toggle -
     /// this only controls whether Milk Meter registers/shows it at all
-    /// from the plugin's own side. On by default.
+    /// from the plugin's own side. On by default. Governs the single
+    /// COMBINED entry covering both meters ("Food: X% | Milk: Y%") - see
+    /// the Waist/Hunger section below for the second meter this now
+    /// covers; there is no separate toggle for that one.
     /// </summary>
     public bool ShowDtrBarEntry { get; set; } = true;
+
+    // --- Waist/Hunger feature, merged in from the standalone Hunger
+    // Meter plugin (see Plugin.cs's class doc comment for why: the two
+    // plugins independently pushing to Customize+ at the same time was
+    // causing them to intermittently erase each other's bone edits).
+    // Opens in its own settings window via /hungermeter or /food,
+    // separate from the main settings window above - see
+    // HungerSettingsWindow.cs. Deliberately does NOT share
+    // ScalingPaused above - per request, each meter pauses
+    // independently.
+
+    /// <summary>
+    /// Same intent as ScalingPaused above, just scoped to the waist
+    /// meter alone - freezes decay, food-consumed increases, and this
+    /// meter's contribution to the combined Customize+ push, without
+    /// touching breast scaling or disabling the plugin entirely. Off by
+    /// default.
+    /// </summary>
+    public bool WaistScalingPaused { get; set; } = false;
+
+    /// <summary>Floor the waist scale decays down to and never goes below. 0.8 by default.</summary>
+    public float WaistMinScale { get; set; } = 0.8f;
+
+    /// <summary>
+    /// Starting value on first-ever run, and the target of the "Reset
+    /// to Baseline" button in the Food/Hunger settings window. This is
+    /// NOT a value the accumulator eases toward on its own the way a
+    /// thermostat setpoint would - it only ever matters at those two
+    /// moments. Also the midpoint used by the DTR bar's percentage
+    /// mapping (see ScalePercent.ComputeTwoSegmentPercent) - Minimum to
+    /// Baseline is 0%-100%, Baseline to Maximum is 100%-200%. 1.0 by
+    /// default.
+    /// </summary>
+    public float WaistBaselineScale { get; set; } = 1.0f;
+
+    /// <summary>Ceiling the waist scale grows up to and never exceeds. 1.2 by default.</summary>
+    public float WaistMaxScale { get; set; } = 1.2f;
+
+    /// <summary>
+    /// Added to the current waist scale every time a food-consumed
+    /// event is detected (a rising edge of the SAME Well Fed status
+    /// FoodBuffTracker already reads for the Food Scale Source above -
+    /// see Plugin.cs's dedicated edge-detection fields for this meter),
+    /// clamped at WaistMaxScale. 0.1 by default.
+    /// </summary>
+    public float WaistIncreasePerFood { get; set; } = 0.1f;
+
+    /// <summary>
+    /// Subtracted per hour of real elapsed time - applied continuously
+    /// every frame proportional to elapsed seconds, not in discrete
+    /// hourly steps (see WaistScale.ApplyDecay) - clamped at
+    /// WaistMinScale. 0.2 by default.
+    /// </summary>
+    public float WaistReductionPerHour { get; set; } = 0.2f;
+
+    /// <summary>
+    /// The actual running waist scale value. float.NaN is the "never
+    /// initialized" sentinel - Plugin.cs seeds it from
+    /// WaistBaselineScale the first time it sees NaN, rather than this
+    /// field just defaulting straight to 1.0f, so a config saved before
+    /// this field existed (or a hand-edited/corrupted one) falls back
+    /// to whatever WaistBaselineScale is currently set to, not a
+    /// hardcoded value that could silently disagree with it.
+    /// </summary>
+    public float CurrentWaistScale { get; set; } = float.NaN;
+
+    /// <summary>
+    /// Unix seconds (UtcNow) as of the last time waist decay was
+    /// applied. Used to retroactively apply decay for real time elapsed
+    /// while the plugin/game wasn't running. Null (not 0) means "never
+    /// run before" - so a config saved before this field existed
+    /// doesn't get treated as "last updated at the Unix epoch" and
+    /// apply decades of decay on its first load.
+    /// </summary>
+    public double? LastUpdateUnixSeconds { get; set; }
 
     /// <summary>
     /// If true, the HUD gauge fades out after HudFadeIdleSeconds of no
