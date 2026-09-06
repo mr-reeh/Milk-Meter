@@ -74,15 +74,6 @@ public sealed class Plugin : IDalamudPlugin
     private readonly BurpSoundPlayer burpSoundPlayer;
     private readonly ThresholdEffectOverlay thresholdEffectOverlay;
 
-    // Waist/hunger edge-detection state, entirely separate from
-    // anything the breast-scale Food Scale Source uses (that one is a
-    // continuous function of remaining time, not an event) - a rising
-    // edge of the SAME Well Fed status (shared foodTracker instance)
-    // counts as "food consumed" for the waist accumulator specifically.
-    // See OnFrameworkUpdate's waist block and WaistScale.ApplyFoodConsumed.
-    private bool lastFoodBuffActiveForWaist;
-    private float? lastRemainingSecondsForWaist;
-
     // Separate from lastPushedScale (chest) - both are checked together
     // in the combined push at the end of OnFrameworkUpdate now that
     // CustomizePlusIpc.SetScales pushes both bones in one call. -1f is
@@ -774,54 +765,49 @@ public sealed class Plugin : IDalamudPlugin
         // per request, the two meters pause independently
         // (WaistScalingPaused below vs ScalingPaused further down).
         // Uses real wall-clock time (NowUnixSeconds), not
-        // ImGuiNowSeconds()'s monotonic stopwatch, since decay needs to
-        // account for real time elapsed even across a full game
-        // restart - see Configuration.LastUpdateUnixSeconds's own doc
-        // comment.
+        // ImGuiNowSeconds()'s monotonic stopwatch, since decay/growth
+        // needs to account for real time elapsed even across a full
+        // game restart - see Configuration.LastUpdateUnixSeconds's own
+        // doc comment.
+        //
+        // UPDATED per request: no more discrete "food consumed" event
+        // detection at all - the mechanic is now purely a function of
+        // Well Fed's current on/off state each frame. While active,
+        // scale grows continuously toward WaistMaxScale
+        // (WaistIncreasePerHourWhileWellFed); while inactive, it decays
+        // continuously toward WaistMinScale (WaistReductionPerHour,
+        // unchanged from before) - the two are mutually exclusive every
+        // frame.
         var nowUnix = NowUnixSeconds();
         var elapsedWaistSeconds = Configuration.LastUpdateUnixSeconds is { } lastUnix ? nowUnix - lastUnix : 0d;
         Configuration.LastUpdateUnixSeconds = nowUnix;
 
-        // Edge detection for "a food item was just consumed" - two
-        // distinct edges both count, mirroring the standalone Hunger
-        // Meter plugin's own identical logic exactly: the buff
-        // transitioning from not-active to active (first bite), or the
-        // buff already being active and RemainingSeconds jumping UP
-        // compared to last frame (eating a second item while still
-        // buffed, refreshing/extending the timer) - remaining time only
-        // ever counts down on its own, so any rise can only mean a new
-        // food item was just consumed. Uses the SAME foodTracker
-        // instance the breast-scale Food Scale Source above already
-        // reads, just with its own separate edge-detection fields,
-        // since that mode needs a continuous taper function instead of
-        // a discrete consumed event.
-        var (foodActiveForWaist, remainingForWaist) = foodTracker.GetFoodBuffState();
-        var waistConsumedEdge = (foodActiveForWaist && !lastFoodBuffActiveForWaist)
-            || (foodActiveForWaist && lastFoodBuffActiveForWaist
-                && remainingForWaist is { } rw && lastRemainingSecondsForWaist is { } lastRw && rw > lastRw + 1f);
+        // Read once, shared by BOTH the waist accumulator immediately
+        // below AND the separate breast-scale WellFedBreastGrowthEnabled
+        // mechanic further down this method (near the GCD/damage-taken/
+        // jump modifiers) - same underlying Well Fed status either way,
+        // just two independent consumers of it, so this is read only
+        // once per frame rather than redundantly polling player.StatusList
+        // twice.
+        var (isWellFedActive, _) = foodTracker.GetFoodBuffState();
 
-        lastFoodBuffActiveForWaist = foodActiveForWaist;
-        lastRemainingSecondsForWaist = remainingForWaist;
-
-        if (!Configuration.WaistScalingPaused)
+        if (!Configuration.WaistScalingPaused && elapsedWaistSeconds > 0d)
         {
-            if (elapsedWaistSeconds > 0d)
-            {
-                Configuration.CurrentWaistScale = WaistScale.ApplyDecay(
+            Configuration.CurrentWaistScale = isWellFedActive
+                ? WaistScale.ApplyGrowth(
+                    Configuration.CurrentWaistScale,
+                    Configuration.WaistMaxScale,
+                    Configuration.WaistIncreasePerHourWhileWellFed,
+                    elapsedWaistSeconds)
+                : WaistScale.ApplyDecay(
                     Configuration.CurrentWaistScale,
                     Configuration.WaistMinScale,
                     Configuration.WaistReductionPerHour,
                     elapsedWaistSeconds);
-            }
+        }
 
-            if (waistConsumedEdge)
-            {
-                Configuration.CurrentWaistScale = WaistScale.ApplyFoodConsumed(
-                    Configuration.CurrentWaistScale,
-                    Configuration.WaistMaxScale,
-                    Configuration.WaistIncreasePerFood);
-            }
-
+        if (!Configuration.WaistScalingPaused)
+        {
             // Defensive re-clamp in case Min/Max were edited at runtime
             // to a range that no longer contains the current value.
             Configuration.CurrentWaistScale = WaistScale.Clamp(
@@ -1043,6 +1029,34 @@ public sealed class Plugin : IDalamudPlugin
 
             wasGcdOnCooldown = gcdOnCooldown;
             lastGcdElapsed = gcdElapsed;
+        }
+
+        // Well Fed breast growth - a SEPARATE, independent mechanic from
+        // both the Food Scale Source (which taper-computes a value fresh
+        // every frame from remaining time) and the waist/hunger meter's
+        // own Well Fed growth above; this one instead nudges
+        // jobCurrentScale itself, the same variable GCD/damage-taken/
+        // jump all modify, per request. Mode-agnostic like those (only
+        // visually apparent while Job mode is the active Scale Source),
+        // and reuses the SAME isWellFedActive read from near the top of
+        // this method rather than polling the buff a second time.
+        // Capped at JobUpperLimitScale (Maximum Scaling In Combat)
+        // always, per request - not JobBaselineScale out of combat,
+        // matching Jump's own ceiling choice above rather than the
+        // damage-taken toggle's context-dependent one. WellFedBreastIncreasePerHour
+        // is a per-HOUR rate (matching the waist meter's own rate
+        // sliders), so it's divided down to per-second here before
+        // calling JobScale.ApplyGrowth, which expects growthPerSecond.
+        // Off by default - opt-in, like every other bidirectional/growth
+        // toggle in this file except GCD.
+        if (Configuration.WellFedBreastGrowthEnabled && isWellFedActive)
+        {
+            jobCurrentScale = JobScale.ApplyGrowth(
+                jobCurrentScale,
+                Configuration.JobUpperLimitScale,
+                Configuration.WellFedBreastIncreasePerHour / 3600f,
+                deltaSeconds);
+            hudGauge.WakeFromIdle();
         }
 
         // Jump-increases-scale: detects a fresh upward vertical-velocity

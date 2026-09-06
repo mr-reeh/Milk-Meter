@@ -1,42 +1,54 @@
 namespace MilkMeter;
 
 /// <summary>
-/// Pure math for the waist/hunger accumulator - ported essentially
-/// unchanged from the standalone Hunger Meter plugin now merged into
-/// this one (see Plugin.cs's class doc comment for why: the two
-/// plugins independently pushing to Customize+ at the same time was
-/// causing them to intermittently erase each other's bone edits, and
-/// merging into a single process with one combined push eliminates
-/// that race entirely rather than just narrowing it).
+/// Pure math for the waist/hunger accumulator - originally ported from
+/// the standalone Hunger Meter plugin now merged into this one (see
+/// Plugin.cs's class doc comment for why: the two plugins independently
+/// pushing to Customize+ at the same time was causing them to
+/// intermittently erase each other's bone edits, and merging into a
+/// single process with one combined push eliminates that race entirely
+/// rather than just narrowing it).
+///
+/// UPDATED per request: the original design applied continuous decay
+/// every frame REGARDLESS of Well Fed state, plus a separate flat bump
+/// on each detected "food consumed" event (see the git history for
+/// ApplyFoodConsumed, since removed). That's been replaced with a
+/// simpler, more intuitive continuous rule instead: while Well Fed is
+/// currently active, scale grows continuously toward WaistMaxScale
+/// (ApplyGrowth); while it's NOT active, scale decays continuously
+/// toward WaistMinScale (ApplyDecay) - same as before. No more discrete
+/// "did I just eat" event detection needed at all, since it's now
+/// purely a function of the buff's current on/off state each frame,
+/// not a transition.
 ///
 /// Unlike Milk Meter's own FoodScale (scale = f(remaining Well Fed
 /// duration), recomputed fresh every tick from a single live reading),
 /// this is a running total: the caller (Plugin.cs) owns the actual
-/// float value in Configuration.CurrentWaistScale and calls into these
-/// two functions to mutate it -
-///   - ApplyDecay every frame, proportional to elapsed real time
-///   - ApplyFoodConsumed once per detected food-consumed edge
-/// Kept as static, stateless functions (mirroring FoodScale.cs's own
-/// shape) so the accumulation logic itself is trivially testable
-/// independent of Dalamud, ObjectTable polling, or persistence.
+/// float value in Configuration.CurrentWaistScale and calls into
+/// ApplyGrowth or ApplyDecay every frame depending on the buff's
+/// current state, proportional to elapsed real time. Kept as static,
+/// stateless functions (mirroring FoodScale.cs's own shape) so the
+/// accumulation logic itself is trivially testable independent of
+/// Dalamud, ObjectTable polling, or persistence.
 /// </summary>
 public static class WaistScale
 {
     public const float DefaultMinScale = 0.8f;
     public const float DefaultBaselineScale = 1.0f;
     public const float DefaultMaxScale = 1.2f;
-    public const float DefaultIncreasePerFood = 0.1f;
+    public const float DefaultIncreasePerHourWhileWellFed = 0.2f;
     public const float DefaultReductionPerHour = 0.2f;
 
     /// <summary>
     /// Reduces currentScale by (reductionPerHour * elapsedSeconds / 3600),
-    /// clamped so it never drops below minScale. Called every frame with
-    /// that frame's own small elapsedSeconds (continuous decay, not a
-    /// once-an-hour step) AND on startup with however many real seconds
-    /// passed since Configuration.LastUpdateUnixSeconds, so a decay rate
-    /// tuned per-hour behaves the same whether it's applied in 1/60th-
-    /// second slices while playing or in one large catch-up slice after
-    /// the game was closed for a while.
+    /// clamped so it never drops below minScale. Called every frame
+    /// Well Fed is NOT active, with that frame's own small
+    /// elapsedSeconds (continuous decay, not a once-an-hour step) AND
+    /// on startup with however many real seconds passed since
+    /// Configuration.LastUpdateUnixSeconds, so a decay rate tuned
+    /// per-hour behaves the same whether it's applied in 1/60th-second
+    /// slices while playing or in one large catch-up slice after the
+    /// game was closed for a while.
     /// </summary>
     public static float ApplyDecay(float currentScale, float minScale, float reductionPerHour, double elapsedSeconds)
     {
@@ -49,15 +61,19 @@ public static class WaistScale
     }
 
     /// <summary>
-    /// Adds increasePerFood to currentScale once per call - callers are
-    /// responsible for calling this exactly once per detected
-    /// food-consumed edge, not once per frame the food buff happens to
-    /// be active (see Plugin.cs's edge detection). Clamped so it never
-    /// exceeds maxScale.
+    /// Mirror of ApplyDecay, in the opposite direction - increases
+    /// currentScale by (increasePerHour * elapsedSeconds / 3600),
+    /// clamped so it never exceeds maxScale. Called every frame Well
+    /// Fed IS active, same continuous-not-stepped and catch-up-safe
+    /// reasoning as ApplyDecay above.
     /// </summary>
-    public static float ApplyFoodConsumed(float currentScale, float maxScale, float increasePerFood)
+    public static float ApplyGrowth(float currentScale, float maxScale, float increasePerHour, double elapsedSeconds)
     {
-        var result = currentScale + increasePerFood;
+        if (elapsedSeconds <= 0d)
+            return currentScale;
+
+        var increase = (float)(increasePerHour * (elapsedSeconds / 3600.0));
+        var result = currentScale + increase;
         return result > maxScale ? maxScale : result;
     }
 

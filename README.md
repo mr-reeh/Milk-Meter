@@ -43,12 +43,14 @@ A second, entirely independent meter, opened in its own settings window via `/hu
 pause toggle.
 
 - Waist size starts at a configurable **Baseline** (default `1.0`).
-- Every real-world hour that passes, it decays toward a configurable **Minimum** (default
-  `0.8`) - applied continuously, not in once-an-hour jumps.
-- Every time you eat a food item (whether that's your first bite or refreshing an
-  already-active buff), it jumps up toward a configurable **Maximum** (default `1.2`).
-- All five values - Minimum, Baseline, Maximum, Increase Per Food, Reduction Per Hour - are
-  sliders in that window.
+- Whenever you do NOT currently have the **Well Fed** buff, it decays toward a
+  configurable **Minimum** (default `0.8`) at a configurable rate per real-world hour.
+- Whenever you DO currently have **Well Fed**, it instead grows toward a configurable
+  **Maximum** (default `1.2`) at its own configurable rate per real-world hour.
+- Both rates apply continuously (not in once-an-hour jumps), and are mutually exclusive -
+  only one applies at a time, based purely on whether Well Fed is active right now.
+- All five values - Minimum, Baseline, Maximum, Increase Per Hour (While Well Fed),
+  Reduction Per Hour - are sliders in that window.
 
 Your progress persists across game restarts: closing the game for a while and reopening it
 applies that elapsed time's decay retroactively, rather than resetting to Baseline.

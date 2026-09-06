@@ -520,6 +520,33 @@ public sealed class Configuration : IPluginConfiguration
     public float JumpScaleIncreaseAmount { get; set; } = 0.01f;
 
     /// <summary>
+    /// If true, while the Well Fed buff is currently active, breast
+    /// scale (jobCurrentScale) grows continuously toward
+    /// JobUpperLimitScale (Maximum Scaling In Combat) at
+    /// WellFedBreastIncreasePerHour, per hour of real elapsed time -
+    /// mirrors the waist/hunger meter's own Well Fed growth mechanic
+    /// (WaistIncreasePerHourWhileWellFed), but as a SEPARATE, independent
+    /// toggle affecting breast scale instead. Mode-agnostic like
+    /// GCD/damage-taken/jump above (only visually apparent while Job
+    /// mode is the active Scale Source). Off by default.
+    /// </summary>
+    public bool WellFedBreastGrowthEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Per-hour rate for WellFedBreastGrowthEnabled above - divided down
+    /// to a per-second rate before being applied (JobScale.ApplyGrowth
+    /// expects growthPerSecond), same conversion the waist meter's own
+    /// rates need. 0.3 by default - at default Job Baseline (1.0) / Job
+    /// Upper Limit (1.3) values, that's exactly the span needed to
+    /// traverse the full 100%-200% DTR range in about an hour of
+    /// continuous Well Fed uptime (0.3 scale units / 0.3 per hour = 1
+    /// hour) - an earlier default of 0.03 was a full order of magnitude
+    /// off from that framing (roughly 10 hours instead of 1), caught
+    /// and corrected per request.
+    /// </summary>
+    public float WellFedBreastIncreasePerHour { get; set; } = 0.3f;
+
+    /// <summary>
     /// The minimum vertical velocity (in yalms/second) that counts as a
     /// fresh jump impulse for JumpIncreasesScaleEnabled's detection. This
     /// is a GUESSED starting value, not verified against any known FFXIV
@@ -618,19 +645,28 @@ public sealed class Configuration : IPluginConfiguration
     public float WaistMaxScale { get; set; } = 1.2f;
 
     /// <summary>
-    /// Added to the current waist scale every time a food-consumed
-    /// event is detected (a rising edge of the SAME Well Fed status
-    /// FoodBuffTracker already reads for the Food Scale Source above -
-    /// see Plugin.cs's dedicated edge-detection fields for this meter),
-    /// clamped at WaistMaxScale. 0.1 by default.
+    /// UPDATED per request: no longer a flat bump added on each
+    /// detected food-consumed event - instead, added continuously per
+    /// hour of real elapsed time while Well Fed is currently active
+    /// (mirror of WaistReductionPerHour below, just growing toward
+    /// WaistMaxScale instead of decaying toward WaistMinScale - see
+    /// WaistScale.ApplyGrowth), reading the SAME Well Fed status
+    /// FoodBuffTracker already checks for the Food Scale Source above.
+    /// The moment Well Fed drops (buff expires or is removed), this
+    /// stops applying and WaistReductionPerHour's decay takes over
+    /// instead - the two are mutually exclusive per frame, never both
+    /// applied at once. 0.2 by default.
     /// </summary>
-    public float WaistIncreasePerFood { get; set; } = 0.1f;
+    public float WaistIncreasePerHourWhileWellFed { get; set; } = 0.2f;
 
     /// <summary>
-    /// Subtracted per hour of real elapsed time - applied continuously
-    /// every frame proportional to elapsed seconds, not in discrete
-    /// hourly steps (see WaistScale.ApplyDecay) - clamped at
-    /// WaistMinScale. 0.2 by default.
+    /// Subtracted per hour of real elapsed time WHILE Well Fed is NOT
+    /// active - applied continuously every frame proportional to
+    /// elapsed seconds, not in discrete hourly steps (see
+    /// WaistScale.ApplyDecay) - clamped at WaistMinScale. The instant
+    /// Well Fed becomes active, this stops and
+    /// WaistIncreasePerHourWhileWellFed above takes over instead. 0.2
+    /// by default.
     /// </summary>
     public float WaistReductionPerHour { get; set; } = 0.2f;
 

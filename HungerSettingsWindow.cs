@@ -51,7 +51,7 @@ public sealed class HungerSettingsWindow(
             configuration.WaistScalingPaused = scalingPaused;
             configuration.Save();
         }
-        ImGui.TextDisabled("Freezes decay and food-consumed increases in place - independent of the " +
+        ImGui.TextDisabled("Freezes growth and decay in place - independent of the " +
             "main Milk Meter window's own pause, which only affects breast scaling.");
 
         ImGui.Separator();
@@ -90,19 +90,22 @@ public sealed class HungerSettingsWindow(
         ImGui.Separator();
         ImGui.Text("Rates");
 
-        var increasePerFood = configuration.WaistIncreasePerFood;
-        if (ImGui.SliderFloat("Scaling Increase Per Food Eaten", ref increasePerFood, 0.00f, 1.00f, "%.2f"))
+        var increasePerHourWhileWellFed = configuration.WaistIncreasePerHourWhileWellFed;
+        if (ImGui.SliderFloat("Well Fed Increase Per Hour", ref increasePerHourWhileWellFed, 0.00f, 1.00f, "%.2f"))
         {
-            configuration.WaistIncreasePerFood = increasePerFood;
+            configuration.WaistIncreasePerHourWhileWellFed = increasePerHourWhileWellFed;
             configuration.Save();
         }
+        ImGui.TextDisabled("Applies continuously while the Well Fed buff is active - grows toward Maximum " +
+            "instead of decaying, mutually exclusive with the reduction rate below.");
 
         var reductionPerHour = configuration.WaistReductionPerHour;
-        if (ImGui.SliderFloat("Scaling Reduction Per Hour", ref reductionPerHour, 0.00f, 1.00f, "%.2f"))
+        if (ImGui.SliderFloat("Well Fed Decrease Per Hour", ref reductionPerHour, 0.00f, 1.00f, "%.2f"))
         {
             configuration.WaistReductionPerHour = reductionPerHour;
             configuration.Save();
         }
+        ImGui.TextDisabled("Applies continuously while Well Fed is NOT active - decays toward Minimum.");
 
         ImGui.Separator();
         ImGui.Text("Status");

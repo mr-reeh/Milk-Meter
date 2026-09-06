@@ -294,6 +294,27 @@ public sealed class SettingsWindow(
                 "limit. Velocity threshold is a GUESSED starting value - use " +
                 "/milkmeter jumpdebug to tune it if jumps are missed or over-triggered.");
 
+            var wellFedBreastGrowthEnabled = configuration.WellFedBreastGrowthEnabled;
+            if (ImGui.Checkbox("Well Fed Increases Scale", ref wellFedBreastGrowthEnabled))
+            {
+                configuration.WellFedBreastGrowthEnabled = wellFedBreastGrowthEnabled;
+                configuration.Save();
+            }
+
+            var wellFedBreastIncreasePerHour = configuration.WellFedBreastIncreasePerHour;
+            if (ImGui.SliderFloat("Well Fed Increase Per Hour", ref wellFedBreastIncreasePerHour, 0.00f, 0.50f, "%.3f"))
+            {
+                configuration.WellFedBreastIncreasePerHour = wellFedBreastIncreasePerHour;
+                configuration.Save();
+            }
+            ImGui.TextDisabled("While the Well Fed buff is active, scale grows continuously toward Maximum " +
+                "Scaling (In Combat) at this rate per hour of real time - independent of the Food Scale " +
+                "Source above (this works regardless of which Scale Source is active) and independent of " +
+                "the waist/hunger meter's own Well Fed growth in its separate window. At default Maximum " +
+                "(Out of Combat)/Maximum (In Combat) values, 0.3 fully traverses 100%-200% on the server " +
+                "info bar in about an hour of continuous Well Fed uptime.");
+
+
             var shakeDrinkEnabled = configuration.ShakeDrinkBoostEnabled;
             if (ImGui.Checkbox("Breast Massage (/shakedrink)", ref shakeDrinkEnabled))
             {
