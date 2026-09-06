@@ -327,7 +327,9 @@ public sealed class Plugin : IDalamudPlugin
                 + "while pressing different GCD spells/weaponskills to confirm or correct "
                 + "GcdRecastGroup if GCD-based reduction doesn't seem to be firing. 'jumpdebug' shows "
                 + "live Y-position/threshold info for tuning JumpVelocityThreshold if jumps are being "
-                + "missed or over-triggered.",
+                + "missed or over-triggered. 'dtrdebug' prints the server info bar entry's current "
+                + "computed percentage, Shown state, and inputs, for diagnosing why it might not be "
+                + "displaying.",
         });
 
         CommandManager.AddHandler(ShortCommandName, new CommandInfo(OnShortCommand)
@@ -433,6 +435,28 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Information($"[MilkMeter] Mode={Configuration.Mode}, " +
                 $"target={ComputeCurrentScale():F3}, applied={GetAppliedScale():F3}");
+            return;
+        }
+
+        if (args.Equals("dtrdebug", System.StringComparison.OrdinalIgnoreCase))
+        {
+            var inCombatNow = Condition[ConditionFlag.InCombat];
+            var ceiling = inCombatNow ? Configuration.JobUpperLimitScale : Configuration.JobBaselineScale;
+            var range = ceiling - Configuration.JobCombatFloorScale;
+            var fraction = range > 0f
+                ? System.Math.Clamp((GetAppliedScale() - Configuration.JobCombatFloorScale) / range, 0f, 1f)
+                : 0f;
+            var percent = (int)System.Math.Round(fraction * 100f);
+
+            Log.Information("[MilkMeter] DTR bar debug info:\n" +
+                $"ShowDtrBarEntry: {Configuration.ShowDtrBarEntry}\n" +
+                $"dtrBarEntry.Shown (actual current value read back from Dalamud): {dtrBarEntry.Shown}\n" +
+                $"GetAppliedScale(): {GetAppliedScale():F3}\n" +
+                $"In combat: {inCombatNow}, ceiling used: {ceiling:F2} (JobCombatFloorScale: {Configuration.JobCombatFloorScale:F2})\n" +
+                $"Computed percent this instant: {percent}, lastDtrBarPercent (last one actually written): {lastDtrBarPercent}\n" +
+                "If ShowDtrBarEntry/Shown are both true here but the bar still shows nothing in-game, " +
+                "that points to a Dalamud-side display/registration issue (try a full game restart, not " +
+                "just a plugin reload) rather than a computation problem on this end.");
             return;
         }
 

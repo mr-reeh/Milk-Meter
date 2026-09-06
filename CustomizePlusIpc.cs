@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
@@ -28,6 +29,28 @@ namespace MilkMeter;
 /// look. Fixed here by reading your active profile's current chest scale
 /// once (CaptureBaseline) and treating the food/mana-driven value as a
 /// MULTIPLIER on that baseline instead of an absolute value.
+///
+/// CROSS-PLUGIN CONFLICT (confirmed via a real reported bug, running
+/// alongside this author's other Customize+-driven plugin, Hunger
+/// Meter, which independently scales the waist bone): the doc comment
+/// on SetChestScale below used to claim this call applies "on top of,
+/// not replacing" the character's existing profile. That assumption
+/// was WRONG. A Customize+ temporary profile, while active, appears to
+/// entirely REPLACE the resolved bone set for the character - only the
+/// bones actually present in the payload get scaled at all; anything
+/// NOT mentioned reverts to unscaled, regardless of what the permanent
+/// profile (or another plugin's own separately-pushed temporary
+/// profile) had set for it. Since this plugin's payload only ever
+/// listed the two chest bones, pushing it would silently blank out
+/// whatever Hunger Meter's own temporary profile had most recently set
+/// on the waist bone - and, symmetrically, Hunger Meter's own next push
+/// would do the same thing back to the chest bones, unless it applies
+/// the same fix described here. SetChestScale below now reads whatever
+/// bones are part of the CURRENTLY active profile immediately before
+/// pushing, and merges its own chest-bone update into that full set
+/// rather than replacing it outright - preserving any other bones
+/// (Hunger Meter's waist edit included) that happen to currently be
+/// part of the active temporary profile.
 ///
 /// STILL UNVERIFIED: the exact bone names for the chest ("j_mune_l" /
 /// "j_mune_r") - the real template file confirmed the surrounding schema
@@ -139,10 +162,12 @@ public sealed class CustomizePlusIpc : IDisposable
 
     /// <summary>
     /// Push a temporary bone-scale override for the chest bones, computed
-    /// as (your baseline chest scale) * multiplier. This is applied on
-    /// top of (not replacing) the player's existing Customize+ profile,
-    /// same as the original ManaMune's "nothing else you scaled is lost"
-    /// behaviour.
+    /// as (your baseline chest scale) * multiplier. Reads whatever bones
+    /// are part of the CURRENTLY active profile right before pushing (see
+    /// ReadCurrentBonesForMerge) and merges the chest-bone update into
+    /// that full set, rather than replacing it outright - see the class
+    /// doc comment's CROSS-PLUGIN CONFLICT section for exactly why this
+    /// merge step exists and what breaks without it.
     /// </summary>
     public void SetChestScale(float multiplier)
     {
@@ -150,10 +175,24 @@ public sealed class CustomizePlusIpc : IDisposable
             return;
 
         var (bx, by, bz) = baselineChestScale ?? (1f, 1f, 1f);
-        var profileJson = BuildTemplateJson(bx * multiplier, by * multiplier, bz * multiplier);
 
         try
         {
+            var bones = ReadCurrentBonesForMerge();
+
+            foreach (var boneName in ChestBones)
+            {
+                bones[boneName] = new JsonObject
+                {
+                    ["Translation"] = new JsonObject { ["X"] = 0.0, ["Y"] = 0.0, ["Z"] = 0.0 },
+                    ["Rotation"] = new JsonObject { ["X"] = 0.0, ["Y"] = 0.0, ["Z"] = 0.0 },
+                    ["Scaling"] = new JsonObject { ["X"] = bx * multiplier, ["Y"] = by * multiplier, ["Z"] = bz * multiplier },
+                };
+            }
+
+            var payload = new JsonObject { ["Bones"] = bones };
+            var profileJson = payload.ToJsonString();
+
             var (errorCode, _) = setTemporaryProfile.InvokeFunc(objectIndex.Value, profileJson);
             if (errorCode != 0)
                 log.Warning($"[MilkMeter] Customize+ SetTemporaryProfileOnCharacter returned error {errorCode}");
@@ -161,6 +200,53 @@ public sealed class CustomizePlusIpc : IDisposable
         catch (Exception ex)
         {
             log.Warning(ex, "[MilkMeter] Failed to push chest scale to Customize+");
+        }
+    }
+
+    /// <summary>
+    /// Reads the "Bones" object of whatever profile is CURRENTLY active
+    /// on the character (which may be this plugin's own previous
+    /// temporary push, another plugin's separately-pushed temporary
+    /// profile, or the permanent profile if neither has pushed recently)
+    /// and returns an independent, mutable copy of it - so SetChestScale
+    /// can overwrite just the two chest bone entries while leaving every
+    /// other bone byte-for-byte as it currently is. Always returns a
+    /// (possibly empty) JsonObject rather than null, so the caller can
+    /// unconditionally index into it regardless of whether reading the
+    /// current profile actually succeeded.
+    ///
+    /// Uses JsonNode.Parse on the "Bones" sub-element's raw text rather
+    /// than trying to reuse the JsonElement view directly - the
+    /// surrounding JsonDocument is disposed the moment this method
+    /// returns, and a JsonElement is only valid while its parent
+    /// JsonDocument is alive, so holding onto it (or anything backed by
+    /// it) past that point would be invalid.
+    /// </summary>
+    private JsonObject ReadCurrentBonesForMerge()
+    {
+        if (objectIndex is null)
+            return new JsonObject();
+
+        try
+        {
+            var (err, profileId) = getActiveProfile.InvokeFunc(objectIndex.Value);
+            if (err != 0 || profileId is null)
+                return new JsonObject();
+
+            var (err2, json) = getProfileById.InvokeFunc(profileId.Value);
+            if (err2 != 0 || string.IsNullOrEmpty(json))
+                return new JsonObject();
+
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("Bones", out var bones))
+                return new JsonObject();
+
+            return JsonNode.Parse(bones.GetRawText()) as JsonObject ?? new JsonObject();
+        }
+        catch (Exception ex)
+        {
+            log.Warning(ex, "[MilkMeter] Failed to read current profile bones for merge - chest update will proceed without preserving other bones this push");
+            return new JsonObject();
         }
     }
 
@@ -243,40 +329,6 @@ public sealed class CustomizePlusIpc : IDisposable
         }
 
         return null;
-    }
-
-    /// <summary>
-    /// Builds a Customize+ template JSON fragment for the chest bones.
-    /// Verified against a real exported template file (Version 4/6 seen
-    /// in testing): each bone needs "Translation", "Rotation", and
-    /// "Scaling" blocks - Translation/Rotation are zeroed here since this
-    /// plugin only ever touches scale. Deliberately omits the top-level
-    /// Version/UniqueId/CreationDate/ModifiedDate/IsWriteProtected fields
-    /// that persisted template files on disk have - those look like
-    /// file-storage metadata rather than something the temporary-profile
-    /// IPC call needs, matching how LightlessSync forwards a bare
-    /// "Bones"-only payload for the same call.
-    /// </summary>
-    private static string BuildTemplateJson(float x, float y, float z)
-    {
-        var xStr = x.ToString("F4", System.Globalization.CultureInfo.InvariantCulture);
-        var yStr = y.ToString("F4", System.Globalization.CultureInfo.InvariantCulture);
-        var zStr = z.ToString("F4", System.Globalization.CultureInfo.InvariantCulture);
-
-        var bones = string.Join(",", Array.ConvertAll(ChestBones, bone =>
-            $$"""
-            "{{bone}}": {
-              "Translation": { "X": 0.0, "Y": 0.0, "Z": 0.0 },
-              "Rotation": { "X": 0.0, "Y": 0.0, "Z": 0.0 },
-              "Scaling": { "X": {{xStr}}, "Y": {{yStr}}, "Z": {{zStr}} }
-            }
-            """));
-
-        return $$"""
-        {
-          "Bones": { {{bones}} }
-        }
-        """;
     }
 
     public void Dispose()
