@@ -282,6 +282,26 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public float DazedDrainFloorScale { get; set; } = 1.0f;
 
+    /// <summary>
+    /// If true, whatever percentage points the Dazed drain removes from
+    /// Milk (breast scale, on its own 0%-200% two-segment mapping) are
+    /// added onto Food (waist scale, on ITS own separate 0%-200%
+    /// two-segment mapping) instead of simply disappearing - per
+    /// request, a thematic "the milk you suck out becomes food eaten"
+    /// interaction between this plugin's two otherwise-independent
+    /// meters. Works entirely in percent-space (see
+    /// ScalePercent.PercentToScale) so it's exact regardless of how
+    /// differently the two meters' own Minimum/Baseline-or-OutOfCombat/
+    /// Maximum sliders happen to be configured - e.g. at default values,
+    /// draining Milk from 200% down to 100% (DazedDrainFloorScale's
+    /// default of 1.0 is exactly Milk's own Baseline/100% mark) adds
+    /// exactly 100 percentage points to Food. Respects
+    /// WaistScalingPaused - no transfer happens while the Food meter
+    /// itself is paused, same as every other mechanic that writes to
+    /// CurrentWaistScale. On by default.
+    /// </summary>
+    public bool DazedTransferToFoodEnabled { get; set; } = true;
+
     /// <summary>The ModeParam value that identifies /dazed specifically. Confirmed as 79 via /milkmeter emotedebug - see ShakeDrinkEmoteModeParam for the full story on how this kind of value gets found rather than guessed.</summary>
     public int DazedEmoteModeParam { get; set; } = 79;
 

@@ -60,4 +60,43 @@ public static class ScalePercent
             return 100f + fraction * 100f;
         }
     }
+
+    /// <summary>
+    /// Exact inverse of ComputeTwoSegmentPercent - given a target
+    /// percentage, returns the actual scale value that would produce
+    /// it. Added for the Self Sucking Milk-to-Food transfer (see
+    /// Plugin.cs's dazedDrainActive branch): rather than converting a
+    /// drained scale amount into food scale units directly (which would
+    /// need its own segment-crossing-aware logic, duplicating what this
+    /// class already does), the transfer works entirely in percent-space
+    /// - compute Milk's percent-point loss via ComputeTwoSegmentPercent,
+    /// add those points onto Food's own current percent (via that same
+    /// function), then convert the resulting target percent back into
+    /// an actual waist scale value via this inverse. Correctly handles a
+    /// transfer that crosses the 100% boundary on either meter, since
+    /// each conversion step independently picks the right segment for
+    /// whatever percent it's given.
+    ///
+    /// percent is clamped to [0, 200] (unlike ComputeTwoSegmentPercent's
+    /// own scale parameter, which is intentionally left unclamped) since
+    /// a percent this method is asked to convert is always a deliberate
+    /// target value from the caller, not a raw scale reading that might
+    /// legitimately fall outside the usual range.
+    /// </summary>
+    public static float PercentToScale(float percent, float minScale, float midScale, float maxScale)
+    {
+        var clampedMid = System.Math.Clamp(midScale, minScale, maxScale);
+        var clampedPercent = System.Math.Clamp(percent, 0f, 200f);
+
+        if (clampedPercent <= 100f)
+        {
+            var span = clampedMid - minScale;
+            return minScale + span * (clampedPercent / 100f);
+        }
+        else
+        {
+            var span = maxScale - clampedMid;
+            return clampedMid + span * ((clampedPercent - 100f) / 100f);
+        }
+    }
 }

@@ -372,6 +372,19 @@ public sealed class SettingsWindow(
                 "of growing - reverting instantly once the emote stops. ModeParam default (79) " +
                 "confirmed via /milkmeter emotedebug.");
 
+            var dazedTransferEnabled = configuration.DazedTransferToFoodEnabled;
+            if (ImGui.Checkbox("Transfer Drained Milk % to Food %", ref dazedTransferEnabled))
+            {
+                configuration.DazedTransferToFoodEnabled = dazedTransferEnabled;
+                configuration.Save();
+            }
+            ImGui.TextDisabled("Whatever percentage points the Dazed drain above removes from Milk (this " +
+                "window's server info bar percentage) are added onto Food (the separate waist/hunger " +
+                "meter's own percentage, in its own /hungermeter or /food window) instead of simply " +
+                "disappearing - e.g. at default values, draining Milk from 200% to 100% (Dazed Drain " +
+                "Floor's default IS Milk's own 100% mark) adds exactly 100 percentage points to Food. No " +
+                "transfer happens while the Food meter's own Scaling Paused is checked.");
+
             var waterDrainEnabled = configuration.WaterDrainBoostEnabled;
             if (ImGui.Checkbox("Breast Feeding Drain (/water)", ref waterDrainEnabled))
             {

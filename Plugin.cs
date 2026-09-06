@@ -1482,8 +1482,39 @@ public sealed class Plugin : IDalamudPlugin
                 }
                 else if (dazedDrainActive)
                 {
+                    var previousBreastScale = jobCurrentScale;
                     var drainPerSecond = Configuration.PassiveScaleGenPerSecond * Configuration.DazedDrainRateMultiplier;
                     jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.DazedDrainFloorScale, drainPerSecond, deltaSeconds);
+
+                    // Milk-to-Food transfer, per request: whatever
+                    // percentage points Milk just lost this frame get
+                    // added onto Food's own percentage, entirely in
+                    // percent-space (see ScalePercent.PercentToScale's
+                    // own doc comment for why) so it's exact regardless
+                    // of how differently each meter's own three sliders
+                    // happen to be configured relative to each other.
+                    // percentPointsLost is normally >=0 here (the drain
+                    // above only ever reduces jobCurrentScale, never
+                    // grows it), but computed via the actual before/
+                    // after percentages rather than assumed, so this
+                    // stays correct even if that ever changes.
+                    if (Configuration.DazedTransferToFoodEnabled && !Configuration.WaistScalingPaused)
+                    {
+                        var milkPercentBefore = ScalePercent.ComputeTwoSegmentPercent(
+                            previousBreastScale, Configuration.JobCombatFloorScale, Configuration.JobBaselineScale, Configuration.JobUpperLimitScale);
+                        var milkPercentAfter = ScalePercent.ComputeTwoSegmentPercent(
+                            jobCurrentScale, Configuration.JobCombatFloorScale, Configuration.JobBaselineScale, Configuration.JobUpperLimitScale);
+                        var percentPointsLost = milkPercentBefore - milkPercentAfter;
+
+                        if (percentPointsLost > 0f)
+                        {
+                            var currentFoodPercent = ScalePercent.ComputeTwoSegmentPercent(
+                                Configuration.CurrentWaistScale, Configuration.WaistMinScale, Configuration.WaistBaselineScale, Configuration.WaistMaxScale);
+                            var newFoodPercent = System.Math.Clamp(currentFoodPercent + percentPointsLost, 0f, 200f);
+                            Configuration.CurrentWaistScale = ScalePercent.PercentToScale(
+                                newFoodPercent, Configuration.WaistMinScale, Configuration.WaistBaselineScale, Configuration.WaistMaxScale);
+                        }
+                    }
 
                     // Repeating milk burst (bottle-local only now) while
                     // the drain is actively running, once per second, at

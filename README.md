@@ -55,6 +55,11 @@ pause toggle.
 Your progress persists across game restarts: closing the game for a while and reopening it
 applies that elapsed time's decay retroactively, rather than resetting to Baseline.
 
+**Milk-to-Food transfer**: while Self Sucking Drain (`/dazed`) is actively draining breast
+scale, whatever percentage points Milk loses get added onto Food instead of simply
+disappearing - toggle this off in the breast-scale settings window if you'd rather the two
+meters stay fully independent.
+
 This used to be a separate plugin (Hunger Meter). It's now merged directly into Milk Meter,
 because the two plugins independently pushing to Customize+ at the same time caused them to
 intermittently erase each other's scaling - one combined plugin avoids that entirely.
