@@ -670,7 +670,23 @@ public sealed class Plugin : IDalamudPlugin
         // independently, since they're driven by the separate UI-draw
         // callback rather than this method).
         if (Configuration.ScalingPaused)
+        {
+            // Still refresh the DTR bar even while paused - otherwise,
+            // if ScalingPaused happens to already be true from the very
+            // first frame after plugin load, UpdateDtrBarEntry() further
+            // down this method would never run even once, leaving the
+            // entry's Text permanently unset (blank, but still
+            // reserving a slot, since Shown was set in the constructor)
+            // for as long as the plugin stays paused - which could be
+            // forever, if nothing else in the session happens to
+            // unpause it. Uses whatever GetAppliedScale() currently
+            // returns, which is itself frozen at its last value while
+            // paused (nothing updates currentAppliedScale during the
+            // early-return below), so this correctly shows the frozen
+            // percentage rather than a stale/uninitialized one.
+            UpdateDtrBarEntry();
             return;
+        }
 
         var deltaSeconds = (float)framework.UpdateDelta.TotalSeconds;
 
