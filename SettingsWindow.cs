@@ -435,6 +435,16 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
+            var guardOutOfCombatOnly = configuration.GuardAutoTriggerOutOfCombatOnly;
+            if (ImGui.Checkbox("Auto-Trigger Only Outside Combat", ref guardOutOfCombatOnly))
+            {
+                configuration.GuardAutoTriggerOutOfCombatOnly = guardOutOfCombatOnly;
+                configuration.Save();
+            }
+            ImGui.TextDisabled("When on, the auto-trigger above stays fully suppressed while actually " +
+                "in combat, regardless of threshold/standing-still/Charmed/Ball Dance - it only fires " +
+                "once you're out of combat. Off by default.");
+
             var guardThreshold = configuration.GuardThresholdScale;
             if (ImGui.SliderFloat("Guard Threshold", ref guardThreshold, 0.10f, 3.00f, "%.2f"))
             {

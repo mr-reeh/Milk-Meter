@@ -345,6 +345,17 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool GuardAutoTriggerEnabled { get; set; } = true;
 
+    /// <summary>
+    /// If true, mirroring ThresholdEffectHeartbeatOutOfCombatOnly's own
+    /// toggle, the guard auto-trigger above is additionally restricted
+    /// to OUT of combat only - it stays fully suppressed while actually
+    /// in combat, regardless of every other condition (threshold,
+    /// standing-still, Charmed/Ball Dance). Off by default, so the
+    /// auto-trigger fires regardless of combat state unless this is
+    /// explicitly turned on.
+    /// </summary>
+    public bool GuardAutoTriggerOutOfCombatOnly { get; set; } = false;
+
     /// <summary>The applied-scale value that must be reached or exceeded for the guard auto-trigger to fire. 1.20 by default.</summary>
     public float GuardThresholdScale { get; set; } = 1.3f;
 

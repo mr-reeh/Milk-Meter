@@ -479,7 +479,9 @@ public sealed class Plugin : IDalamudPlugin
             var charmedActive = emoteLoopTracker.IsCharmedActive(Configuration);
             var ballDanceActive = emoteLoopTracker.IsBallDanceActive(Configuration);
             var guardSuppressed = charmedActive || ballDanceActive;
-            var wouldTrigger = Configuration.GuardAutoTriggerEnabled && scaleAtOrAbove && standingStill && !guardSuppressed;
+            var inCombatNow = Condition[ConditionFlag.InCombat];
+            var combatSuppressed = Configuration.GuardAutoTriggerOutOfCombatOnly && inCombatNow;
+            var wouldTrigger = Configuration.GuardAutoTriggerEnabled && scaleAtOrAbove && standingStill && !guardSuppressed && !combatSuppressed;
             var secondsUntilNextFire = lastGuardTriggerTime < 0d
                 ? 0d
                 : System.Math.Max(0d, GuardTriggerIntervalSeconds - (ImGuiNowSeconds() - lastGuardTriggerTime));
@@ -490,6 +492,7 @@ public sealed class Plugin : IDalamudPlugin
                 $"Seconds since last movement: {(secondsSinceMovement.HasValue ? secondsSinceMovement.Value.ToString("F2") : "never moved yet")}, " +
                 $"required: {PositionStillnessRequiredSeconds:F1}, standing still: {standingStill}\n" +
                 $"Charmed active: {charmedActive}, Ball Dance active: {ballDanceActive} (either one suppresses the trigger entirely)\n" +
+                $"GuardAutoTriggerOutOfCombatOnly: {Configuration.GuardAutoTriggerOutOfCombatOnly}, currently in combat: {inCombatNow}, suppressed by this: {combatSuppressed}\n" +
                 $"All conditions met (fires once per second while true, not a one-time trigger): {wouldTrigger}\n" +
                 $"Seconds until next fire (if conditions stay met): {secondsUntilNextFire:F1}");
             return;
@@ -997,7 +1000,12 @@ public sealed class Plugin : IDalamudPlugin
         // a mode switch or death. Per a later request, ALSO suppressed
         // entirely (skipped for the tick, regardless of the other
         // conditions) while the player is Charmed or performing Ball
-        // Dance, so it doesn't interrupt either of those.
+        // Dance, so it doesn't interrupt either of those. Per a further
+        // request, mirroring the heartbeat sound's own toggle,
+        // GuardAutoTriggerOutOfCombatOnly can additionally restrict
+        // this to OUT of combat only - it stays fully suppressed while
+        // actually in combat, regardless of every other condition
+        // above, once turned on.
         {
             var currentPosition = ObjectTable.LocalPlayer?.Position;
             if (currentPosition is { } position)
@@ -1022,7 +1030,8 @@ public sealed class Plugin : IDalamudPlugin
             var shouldGuard = Configuration.GuardAutoTriggerEnabled
                 && scaleAtOrAboveGuardThreshold
                 && isStandingStill
-                && !guardSuppressed;
+                && !guardSuppressed
+                && !(Configuration.GuardAutoTriggerOutOfCombatOnly && Condition[ConditionFlag.InCombat]);
 
             if (shouldGuard)
             {
