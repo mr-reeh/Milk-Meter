@@ -440,20 +440,22 @@ public sealed class Plugin : IDalamudPlugin
 
         if (args.Equals("dtrdebug", System.StringComparison.OrdinalIgnoreCase))
         {
-            var inCombatNow = Condition[ConditionFlag.InCombat];
-            var ceiling = inCombatNow ? Configuration.JobUpperLimitScale : Configuration.JobBaselineScale;
-            var range = ceiling - Configuration.JobCombatFloorScale;
-            var fraction = range > 0f
-                ? System.Math.Clamp((GetAppliedScale() - Configuration.JobCombatFloorScale) / range, 0f, 1f)
-                : 0f;
-            var percent = (int)System.Math.Round(fraction * 100f);
+            var percent = JobScale.ComputePercent(
+                GetAppliedScale(),
+                Configuration.JobCombatFloorScale,
+                Configuration.JobBaselineScale,
+                Configuration.JobUpperLimitScale);
+            var roundedPercent = (int)System.Math.Round(percent);
 
             Log.Information("[MilkMeter] DTR bar debug info:\n" +
                 $"ShowDtrBarEntry: {Configuration.ShowDtrBarEntry}\n" +
                 $"dtrBarEntry.Shown (actual current value read back from Dalamud): {dtrBarEntry.Shown}\n" +
                 $"GetAppliedScale(): {GetAppliedScale():F3}\n" +
-                $"In combat: {inCombatNow}, ceiling used: {ceiling:F2} (JobCombatFloorScale: {Configuration.JobCombatFloorScale:F2})\n" +
-                $"Computed percent this instant: {percent}, lastDtrBarPercent (last one actually written): {lastDtrBarPercent}\n" +
+                $"JobCombatFloorScale (0%): {Configuration.JobCombatFloorScale:F2}, " +
+                $"JobBaselineScale (100%): {Configuration.JobBaselineScale:F2}, " +
+                $"JobUpperLimitScale (200%): {Configuration.JobUpperLimitScale:F2}\n" +
+                $"Computed percent this instant: {percent:F1} (rounded to {roundedPercent}), " +
+                $"lastDtrBarPercent (last one actually written): {lastDtrBarPercent}\n" +
                 "If ShowDtrBarEntry/Shown are both true here but the bar still shows nothing in-game, " +
                 "that points to a Dalamud-side display/registration issue (try a full game restart, not " +
                 "just a plugin reload) rather than a computation problem on this end.");
@@ -1447,11 +1449,15 @@ public sealed class Plugin : IDalamudPlugin
 
     /// <summary>
     /// Refreshes the DTR (server info bar) entry to show the current
-    /// applied scale as a percentage - Minimum Scaling is 0%, and
-    /// whichever Maximum Scaling currently applies (In Combat or Out of
-    /// Combat, matching the exact same context-dependent ceiling choice
-    /// used for ordinary passive growth elsewhere in this file) is
-    /// 100%, per request. Universal across all three Scale Sources
+    /// applied scale as a percentage, via JobScale.ComputePercent - per
+    /// request, Minimum Scaling to Maximum Scaling (Out of Combat) maps
+    /// onto 0%-100%, and Maximum Scaling (Out of Combat) to Maximum
+    /// Scaling (In Combat) maps onto 100%-200% (previously this only
+    /// used whichever ceiling currently applied for a single 0%-100%
+    /// range - replaced with the two-segment version since scale can
+    /// legitimately exceed Maximum Scaling (Out of Combat) while in
+    /// combat, which needs to show as MORE than 100%, not get capped
+    /// there). Universal across all three Scale Sources
     /// (Food/Mana/Job), not just Job mode, since Minimum/Maximum Scaling
     /// are themselves already treated as global bounds elsewhere in
     /// this file (the death-reset floor, Extra Scale Gen's drain
@@ -1485,12 +1491,11 @@ public sealed class Plugin : IDalamudPlugin
         if (!Configuration.ShowDtrBarEntry)
             return;
 
-        var ceiling = Condition[ConditionFlag.InCombat] ? Configuration.JobUpperLimitScale : Configuration.JobBaselineScale;
-        var range = ceiling - Configuration.JobCombatFloorScale;
-        var fraction = range > 0f
-            ? (GetAppliedScale() - Configuration.JobCombatFloorScale) / range
-            : 0f;
-        var percent = (int)System.Math.Round(System.Math.Clamp(fraction, 0f, 1f) * 100f);
+        var percent = (int)System.Math.Round(JobScale.ComputePercent(
+            GetAppliedScale(),
+            Configuration.JobCombatFloorScale,
+            Configuration.JobBaselineScale,
+            Configuration.JobUpperLimitScale));
 
         if (percent == lastDtrBarPercent)
             return;

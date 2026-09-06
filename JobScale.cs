@@ -491,6 +491,58 @@ public static class JobScale
     }
 
     /// <summary>
+    /// Maps an applied scale to a percentage for the DTR (server info
+    /// bar) display, per request: Minimum Scaling to Maximum Scaling
+    /// (Out of Combat) maps onto 0%-100%, and Maximum Scaling (Out of
+    /// Combat) to Maximum Scaling (In Combat) maps onto 100%-200% - two
+    /// separate linear segments rather than one formula across the
+    /// whole range, since Maximum (Out of Combat) isn't necessarily the
+    /// midpoint of Minimum/Maximum (In Combat) (all three are
+    /// independently configurable sliders with no relative clamping
+    /// between them). Mirrors this author's other plugin (Hunger
+    /// Meter)'s own WaistScale.ComputePercent exactly - same two-segment
+    /// shape, just with Maximum Scaling (Out of Combat) playing the role
+    /// Hunger Meter calls "Baseline".
+    ///
+    /// maxOutOfCombat is defensively clamped into [minScale, maxInCombat]
+    /// for purposes of this calculation only (not mutating any actual
+    /// config value) - the settings window doesn't enforce
+    /// JobBaselineScale/JobUpperLimitScale to stay relatively ordered
+    /// against each other or against JobCombatFloorScale, so a
+    /// pathological config could otherwise give one of the two segments
+    /// a zero-or-negative span; that case returns a flat 100% for
+    /// whichever segment it affects, rather than a nonsensical or
+    /// divide-by-zero result. Not clamped to [0, 200] overall - a scale
+    /// genuinely outside [minScale, maxInCombat] (which can legitimately
+    /// happen in Food/Mana modes, whose own scale ranges are completely
+    /// independent of these three sliders) extrapolates naturally
+    /// outside 0%-200% rather than being forced back into range.
+    /// </summary>
+    public static float ComputePercent(float scale, float minScale, float maxOutOfCombat, float maxInCombat)
+    {
+        var clampedMaxOutOfCombat = Math.Clamp(maxOutOfCombat, minScale, maxInCombat);
+
+        if (scale <= clampedMaxOutOfCombat)
+        {
+            var span = clampedMaxOutOfCombat - minScale;
+            if (span <= 0f)
+                return 100f;
+
+            var fraction = (scale - minScale) / span;
+            return fraction * 100f;
+        }
+        else
+        {
+            var span = maxInCombat - clampedMaxOutOfCombat;
+            if (span <= 0f)
+                return 100f;
+
+            var fraction = (scale - clampedMaxOutOfCombat) / span;
+            return 100f + fraction * 100f;
+        }
+    }
+
+    /// <summary>
     /// The user-configurable overuse-bonus multiplier for a given ability
     /// name - fully in the user's hands via the settings window, not
     /// derived automatically. Defaults match each ability's real cooldown
