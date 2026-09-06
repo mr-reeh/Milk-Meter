@@ -42,7 +42,10 @@ namespace MilkMeter;
 /// The heartbeat and moan sounds are each a plain on/off trigger,
 /// independent of the vignette's own ramp and independent of each
 /// other - the heartbeat starts once the applied scale reaches
-/// Configuration.ThresholdEffectHeartbeatSoundThreshold, and the moan
+/// Configuration.ThresholdEffectHeartbeatSoundThreshold (and, if
+/// Configuration.ThresholdEffectHeartbeatOutOfCombatOnly is on,
+/// additionally only while actually out of combat - checked via the
+/// inCombat parameter Draw() now takes), and the moan
 /// sound starts once it reaches Configuration.ThresholdEffectMoanSoundThreshold
 /// - two separately configurable values. These used to be a single
 /// combined heartbeat.wav file with both sounds mixed together; split
@@ -66,7 +69,7 @@ public sealed class ThresholdEffectOverlay(Configuration configuration, Heartbea
     private float currentAlpha;
     private double lastUpdateTime = -1d;
 
-    public void Draw(float currentValue)
+    public void Draw(float currentValue, bool inCombat)
     {
         // Completely stops while Configuration.ScalingPaused is true,
         // per request - an instant hard stop (currentAlpha snapped
@@ -117,7 +120,8 @@ public sealed class ThresholdEffectOverlay(Configuration configuration, Heartbea
         // needs one anymore).
         var heartbeatActive = configuration.ThresholdEffectHeartbeatSoundEnabled
             && configuration.ThresholdEffectEnabled
-            && currentValue >= configuration.ThresholdEffectHeartbeatSoundThreshold;
+            && currentValue >= configuration.ThresholdEffectHeartbeatSoundThreshold
+            && !(configuration.ThresholdEffectHeartbeatOutOfCombatOnly && inCombat);
 
         if (heartbeatActive)
             heartbeatSoundPlayer.StartLooping();

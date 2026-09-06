@@ -742,6 +742,16 @@ public sealed class SettingsWindow(
             "on/off only, independent of the vignette's own ramp start/end above, and independent " +
             "of the separate moan sound below.");
 
+        var heartbeatOutOfCombatOnly = configuration.ThresholdEffectHeartbeatOutOfCombatOnly;
+        if (ImGui.Checkbox("Heartbeat Only Outside Combat", ref heartbeatOutOfCombatOnly))
+        {
+            configuration.ThresholdEffectHeartbeatOutOfCombatOnly = heartbeatOutOfCombatOnly;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("When on, the heartbeat above stays silent while actually in combat, " +
+            "regardless of scale - it only plays once you're out of combat and above the threshold. " +
+            "Off by default.");
+
         var thresholdEffectMoanSound = configuration.ThresholdEffectMoanSoundEnabled;
         if (ImGui.Checkbox("Threshold Effect Moan Sound", ref thresholdEffectMoanSound))
         {

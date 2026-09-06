@@ -663,6 +663,18 @@ public sealed class Configuration : IPluginConfiguration
     public float ThresholdEffectHeartbeatSoundThreshold { get; set; } = 1.2f;
 
     /// <summary>
+    /// If true, the heartbeat sound (whenever ThresholdEffectHeartbeatSoundEnabled
+    /// and the scale threshold above would otherwise have it playing)
+    /// is additionally restricted to OUT of combat only - it stays
+    /// silent while actually in combat, regardless of scale. Checked
+    /// every frame alongside the existing threshold check in
+    /// ThresholdEffectOverlay.Draw(), not a separate on/off trigger of
+    /// its own. Off by default, so the heartbeat plays regardless of
+    /// combat state unless this is explicitly turned on.
+    /// </summary>
+    public bool ThresholdEffectHeartbeatOutOfCombatOnly { get; set; } = false;
+
+    /// <summary>
     /// If true, a second, independent looping sound (embedded in the
     /// plugin, played via System.Media.SoundPlayer - see
     /// MoanSoundPlayer) plays once the applied scale reaches

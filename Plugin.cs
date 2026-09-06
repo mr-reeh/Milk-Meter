@@ -297,7 +297,7 @@ public sealed class Plugin : IDalamudPlugin
             () => manaTracker.GetManaFraction(),
             jobTracker.GetTrackedAbilityDisplayName,
             () => (Condition[ConditionFlag.InCombat], jobCurrentScale));
-        hudGauge = new HudGaugeWindow(Configuration, GetAppliedScale, () => Condition[ConditionFlag.InCombat]);
+        hudGauge = new HudGaugeWindow(Configuration, GetAppliedScale, () => Condition[ConditionFlag.InCombat], ResetScaleToBaseline);
         heartbeatSoundPlayer = new HeartbeatSoundPlayer(Log);
         moanSoundPlayer = new MoanSoundPlayer(Log);
         burpSoundPlayer = new BurpSoundPlayer(Log);
@@ -416,7 +416,7 @@ public sealed class Plugin : IDalamudPlugin
     // separately-written lambdas with identical bodies are NOT the same
     // delegate instance, so -= with a fresh lambda would silently fail
     // to unsubscribe the original one.
-    private void DrawThresholdEffect() => thresholdEffectOverlay.Draw(GetAppliedScale());
+    private void DrawThresholdEffect() => thresholdEffectOverlay.Draw(GetAppliedScale(), Condition[ConditionFlag.InCombat]);
 
     private void OnCommand(string command, string args)
     {
@@ -1375,6 +1375,41 @@ public sealed class Plugin : IDalamudPlugin
 
     /// <summary>The actual scale currently pushed to Customize+ (post-animation), for the settings window's monitor.</summary>
     private float GetAppliedScale() => currentAppliedScale < 0f ? 1f : currentAppliedScale;
+
+    /// <summary>
+    /// Called by HudGaugeWindow the instant the gauge is right-clicked -
+    /// a standalone reset to 1.0, distinct from left-click's pause
+    /// toggle: doesn't touch Configuration.ScalingPaused at all (works
+    /// identically whether currently paused or not), and doesn't freeze
+    /// anything afterward - growth/drain/whatever mechanic is currently
+    /// active just continues normally from 1.0 on the very next tick.
+    /// Also cancels an in-progress moan ramp, same as the 'minimum'/
+    /// 'maximum'/direct-set commands in OnShortCommand, since this is
+    /// the same kind of explicit override. Resets jobCurrentScale (the
+    /// only mode with an internally-tracked value to reset - Food/Mana
+    /// modes compute their target fresh from live external state every
+    /// frame instead, so there's nothing to reset there) AND
+    /// currentAppliedScale directly, then pushes to Customize+
+    /// immediately rather than waiting for the next OnFrameworkUpdate
+    /// tick to naturally pick it up - not strictly necessary the way it
+    /// was for the (since-reverted) pause-resets-to-1.0 feature, since
+    /// nothing is skipped here the way ScalingPaused's early-return
+    /// skips OnFrameworkUpdate, but pushing immediately still means the
+    /// visual snap to 1.0 doesn't wait on the next tick's own throttling
+    /// (MinSecondsBetweenPushes/MinScaleDelta) to decide it's worth
+    /// pushing.
+    /// </summary>
+    private void ResetScaleToBaseline()
+    {
+        moanRampActive = false;
+        jobCurrentScale = 1.0f;
+        currentAppliedScale = 1.0f;
+        customizePlus.SetChestScale(1.0f);
+        lastPushedScale = 1.0f;
+        lastPushTime = ImGuiNowSeconds();
+        Log.Information("[MilkMeter] Gauge right-clicked - scale reset to 1.0.");
+    }
+
 
     private static double ImGuiNowSeconds() =>
         System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;

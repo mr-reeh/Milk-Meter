@@ -135,7 +135,7 @@ namespace MilkMeter;
 /// match the body), since it moves up and down as the fraction changes.
 /// Barely noticeable except right at 100% full.
 /// </summary>
-public sealed class HudGaugeWindow(Configuration configuration, Func<float> getAppliedScale, Func<bool> getInCombat)
+public sealed class HudGaugeWindow(Configuration configuration, Func<float> getAppliedScale, Func<bool> getInCombat, Action onRightClicked)
 {
     // Base dimensions at HudScale = 1.0. All multiplied by
     // Configuration.HudScale when actually drawing. Matches the
@@ -303,6 +303,22 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
                     configuration.ScalingPaused = !configuration.ScalingPaused;
                     configuration.Save();
                 }
+
+                // Right-click resets scale to 1.0, per request - a
+                // separate, one-shot action distinct from the
+                // left-click pause toggle above: it doesn't touch
+                // Configuration.ScalingPaused at all (works the same
+                // whether currently paused or not), and growth/drain
+                // continue normally from 1.0 afterward rather than
+                // freezing there. Same HudLocked/hovered gating as the
+                // left-click above, for the same drag-vs-click reason.
+                // Plugin.cs owns what "scale" actually means and how to
+                // push it to Customize+ immediately (this window has no
+                // access to either), so it's entirely delegated via
+                // this callback rather than reaching into Plugin.cs
+                // internals from here.
+                if (configuration.HudLocked && hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+                    onRightClicked();
 
                 // Scales this window's font for the rest of the frame's text
                 // draws (both ImGui.CalcTextSize and drawList.AddText pick up
