@@ -706,6 +706,21 @@ public sealed class Configuration : IPluginConfiguration
     public float WaistReductionPerHour { get; set; } = 0.2f;
 
     /// <summary>
+    /// A THIRD independent rate, per request - unlike
+    /// WaistIncreasePerHourWhileWellFed/WaistReductionPerHour above
+    /// (which are mutually exclusive, only one applying per frame based
+    /// on Well Fed's current state), this applies every frame
+    /// REGARDLESS of Well Fed - always draining toward WaistMinScale,
+    /// layered additively on top of whichever of the other two just ran
+    /// this same frame. Off by default, so it has no effect unless
+    /// explicitly turned on.
+    /// </summary>
+    public bool WaistConstantDecreaseEnabled { get; set; } = false;
+
+    /// <summary>Per-hour rate for WaistConstantDecreaseEnabled above - same WaistScale.ApplyDecay function and per-hour-to-per-frame conversion as WaistReductionPerHour, just running unconditionally instead of only while not Well Fed. 0.05 by default.</summary>
+    public float WaistConstantDecreasePerHour { get; set; } = 0.05f;
+
+    /// <summary>
     /// Reintroduced per request - a flat, event-triggered bump ADDED ON
     /// TOP OF the continuous growth/decay above (not a replacement for
     /// it), applied once per detected food-consumed edge (see

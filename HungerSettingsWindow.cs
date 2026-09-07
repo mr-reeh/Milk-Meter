@@ -125,6 +125,24 @@ public sealed class HungerSettingsWindow(
         }
         ImGui.TextDisabled("Applies continuously while Well Fed is NOT active - decays toward Minimum.");
 
+        var constantDecreaseEnabled = configuration.WaistConstantDecreaseEnabled;
+        if (ImGui.Checkbox("Constant Decrease Regardless of Well Fed", ref constantDecreaseEnabled))
+        {
+            configuration.WaistConstantDecreaseEnabled = constantDecreaseEnabled;
+            configuration.Save();
+        }
+
+        var constantDecreasePerHour = configuration.WaistConstantDecreasePerHour;
+        if (ImGui.SliderFloat("Constant Decrease Per Hour", ref constantDecreasePerHour, 0.00f, 1.00f, "%.2f"))
+        {
+            configuration.WaistConstantDecreasePerHour = constantDecreasePerHour;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("A THIRD, independent rate - unlike the two above (only one of which applies " +
+            "at a time, based on Well Fed), this drains toward Minimum every hour of real time " +
+            "REGARDLESS of Well Fed state, layered additively on top of whichever of the other two just " +
+            "applied. Off by default.");
+
         var foodBumpEnabled = configuration.WaistFoodEatenBumpEnabled;
         if (ImGui.Checkbox("Food Eaten Adds Flat Amount", ref foodBumpEnabled))
         {

@@ -896,6 +896,26 @@ public sealed class Plugin : IDalamudPlugin
                     Configuration.WaistReductionPerHour,
                     elapsedWaistSeconds);
 
+            // Constant decrease, per request - UNLIKE WaistReductionPerHour
+            // above (which only applies while Well Fed is NOT active,
+            // mutually exclusive with growth), this applies every frame
+            // regardless of Well Fed state, layered additively on top of
+            // whichever of growth/decay just happened above. While Well
+            // Fed is active, this partially offsets the growth; while
+            // it's not, this compounds with the existing decay (both
+            // targeting the same WaistMinScale floor, so it just gets
+            // there faster, never past it). Same WaistScale.ApplyDecay
+            // function as the mutually-exclusive decay above - the only
+            // difference is WHEN it's allowed to run.
+            if (Configuration.WaistConstantDecreaseEnabled)
+            {
+                Configuration.CurrentWaistScale = WaistScale.ApplyDecay(
+                    Configuration.CurrentWaistScale,
+                    Configuration.WaistMinScale,
+                    Configuration.WaistConstantDecreasePerHour,
+                    elapsedWaistSeconds);
+            }
+
             // Gradually apply whatever's still pending from the flat
             // bump above, ADDITIVE on top of the continuous growth/decay
             // that just happened this same frame - a genuinely separate,
