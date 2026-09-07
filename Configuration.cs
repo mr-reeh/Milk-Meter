@@ -737,6 +737,27 @@ public sealed class Configuration : IPluginConfiguration
     public float WaistFoodEatenBumpAmount { get; set; } = 0.1f;
 
     /// <summary>
+    /// If true, whenever a food-consumed edge fires (see
+    /// OnFrameworkUpdate's foodConsumedEdge) while the "Meat and Mead"
+    /// buff (from the Squadron Rationing Manual item, or the equivalent
+    /// Free Company action) is ALSO currently active -
+    /// FoodBuffTracker.IsMeatAndMeadActive() - the amount queued is
+    /// WaistFoodEatenBumpAmount multiplied by
+    /// WaistRationingManualBumpMultiplier below, instead of the plain
+    /// unmultiplied amount. Only checked at the moment of the edge
+    /// itself, not continuously - a Meat and Mead buff that starts or
+    /// ends between two food-eaten events doesn't retroactively affect
+    /// a bump already queued. On by default, with the multiplier below
+    /// also defaulting to an active 1.5x bonus per request - so this
+    /// combination is live out of the box, not something that needs
+    /// the multiplier raised first to take effect.
+    /// </summary>
+    public bool WaistRationingManualBumpBonusEnabled { get; set; } = true;
+
+    /// <summary>Multiplier applied to WaistFoodEatenBumpAmount when WaistRationingManualBumpBonusEnabled is on and Meat and Mead is active at the moment of a food-consumed edge. 1.5 by default (a 50% bigger bump) - e.g. with the default 0.1 base amount, this makes it 0.15 while Meat and Mead is up.</summary>
+    public float WaistRationingManualBumpMultiplier { get; set; } = 1.5f;
+
+    /// <summary>
     /// The actual running waist scale value. float.NaN is the "never
     /// initialized" sentinel - Plugin.cs seeds it from
     /// WaistBaselineScale the first time it sees NaN, rather than this

@@ -478,6 +478,40 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
+        if (args.Equals("statuslist", System.StringComparison.OrdinalIgnoreCase))
+        {
+            // Dumps every currently active status name/remaining-time
+            // pair to /xllog - added specifically to confirm the real
+            // in-game name of the "Meat and Mead" buff (applied by the
+            // Squadron Rationing Manual) before trusting
+            // FoodBuffTracker.IsMeatAndMeadActive()'s prefix match
+            // against it, same verification instinct as /milkmeter
+            // emotedebug for ModeParam values - but generically useful
+            // for confirming ANY status name this project might need to
+            // match against in the future too.
+            var player = ObjectTable.LocalPlayer;
+            if (player is null)
+            {
+                Log.Information("[MilkMeter] No local player found.");
+                return;
+            }
+
+            var lines = new System.Collections.Generic.List<string>();
+            foreach (var status in player.StatusList)
+            {
+                var row = status.GameData.ValueNullable;
+                var name = row?.Name.ExtractText();
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                lines.Add($"\"{name}\" - {status.RemainingTime:F0}s remaining");
+            }
+
+            Log.Information(lines.Count > 0
+                ? $"[MilkMeter] Active statuses:\n{string.Join("\n", lines)}"
+                : "[MilkMeter] No active statuses found.");
+            return;
+        }
+
         // Mirror of /milk's own plain-number command - '/food 0.8'
         // sets waist scale directly, clamped between Minimum and
         // Maximum Waist Scaling (no separate in-combat ceiling here,
@@ -880,7 +914,20 @@ public sealed class Plugin : IDalamudPlugin
         lastRemainingSecondsForBump = remainingSecondsForBump;
 
         if (Configuration.WaistFoodEatenBumpEnabled && foodConsumedEdge)
-            pendingWaistFoodBumpAmount += Configuration.WaistFoodEatenBumpAmount;
+        {
+            // Squadron Rationing Manual bonus, per request - checked
+            // only at the instant of the edge itself (see
+            // Configuration.WaistRationingManualBumpBonusEnabled's own
+            // doc comment for why that's a deliberate choice, not a
+            // limitation). IsMeatAndMeadActive() is a separate query
+            // from the isWellFedActive read above - Meat and Mead and
+            // Well Fed are entirely independent statuses.
+            var bumpAmount = Configuration.WaistFoodEatenBumpAmount;
+            if (Configuration.WaistRationingManualBumpBonusEnabled && foodTracker.IsMeatAndMeadActive())
+                bumpAmount *= Configuration.WaistRationingManualBumpMultiplier;
+
+            pendingWaistFoodBumpAmount += bumpAmount;
+        }
 
         if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive && elapsedWaistSeconds > 0d)
         {

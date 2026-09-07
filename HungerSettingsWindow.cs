@@ -161,6 +161,24 @@ public sealed class HungerSettingsWindow(
             "of them. Eases in gradually rather than jumping instantly - eating several times in a row " +
             "just queues up more to ease in, it doesn't stack as a sudden jump.");
 
+        var rationingBonusEnabled = configuration.WaistRationingManualBumpBonusEnabled;
+        if (ImGui.Checkbox("Squadron Rationing Manual Bonus", ref rationingBonusEnabled))
+        {
+            configuration.WaistRationingManualBumpBonusEnabled = rationingBonusEnabled;
+            configuration.Save();
+        }
+
+        var rationingMultiplier = configuration.WaistRationingManualBumpMultiplier;
+        if (ImGui.SliderFloat("Rationing Manual Bump Multiplier", ref rationingMultiplier, 1.0f, 3.0f, "%.2fx"))
+        {
+            configuration.WaistRationingManualBumpMultiplier = rationingMultiplier;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("If the \"Meat and Mead\" buff is active at the moment food is eaten (from the " +
+            "Squadron Rationing Manual item, or the equivalent Free Company action), the bump amount " +
+            "above is multiplied by this instead of applied plain - e.g. at the defaults, 0.10 becomes " +
+            "0.15. Only checked at the instant of eating, not continuously.");
+
         ImGui.Separator();
         ImGui.Text("Status");
 
