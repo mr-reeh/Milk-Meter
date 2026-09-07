@@ -405,7 +405,9 @@ public sealed class Plugin : IDalamudPlugin
         CommandManager.AddHandler(HungerCommandName, new CommandInfo(OnHungerCommand)
         {
             HelpMessage = "'/hungermeter' toggles the Food/Hunger settings window. 'status' prints the "
-                + "current waist scale. 'reset' resets waist scale to Baseline. This is a SEPARATE meter "
+                + "current waist scale. 'reset' resets waist scale to Baseline. A plain number (e.g. "
+                + "'0.9') sets waist scale directly to that value, clamped between Minimum and Maximum "
+                + "Waist Scaling. This is a SEPARATE meter "
                 + "from breast scaling above - see /milkmeter for that one.",
         });
 
@@ -436,6 +438,23 @@ public sealed class Plugin : IDalamudPlugin
         if (args.Equals("reset", System.StringComparison.OrdinalIgnoreCase))
         {
             ResetWaistToBaseline();
+            return;
+        }
+
+        // Mirror of /milk's own plain-number command - '/food 0.8'
+        // sets waist scale directly, clamped between Minimum and
+        // Maximum Waist Scaling (no separate in-combat ceiling here,
+        // unlike the breast-scale version - the waist meter only has
+        // the one Maximum). Cancels nothing else in-progress, since
+        // unlike breast scaling this meter has no moan-ramp equivalent
+        // to worry about interrupting.
+        if (float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var requestedWaistScale))
+        {
+            Configuration.CurrentWaistScale = System.Math.Clamp(requestedWaistScale, Configuration.WaistMinScale, Configuration.WaistMaxScale);
+            Configuration.LastUpdateUnixSeconds = NowUnixSeconds();
+            Configuration.Save();
+            Log.Information($"[MilkMeter] Setting waist scale to {Configuration.CurrentWaistScale:F2} (requested {requestedWaistScale:F2}, " +
+                $"clamped between Minimum Waist Scaling {Configuration.WaistMinScale:F2} and Maximum Waist Scaling {Configuration.WaistMaxScale:F2}).");
             return;
         }
 
