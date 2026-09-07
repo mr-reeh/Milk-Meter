@@ -125,6 +125,24 @@ public sealed class HungerSettingsWindow(
         }
         ImGui.TextDisabled("Applies continuously while Well Fed is NOT active - decays toward Minimum.");
 
+        var foodBumpEnabled = configuration.WaistFoodEatenBumpEnabled;
+        if (ImGui.Checkbox("Food Eaten Adds Flat Amount", ref foodBumpEnabled))
+        {
+            configuration.WaistFoodEatenBumpEnabled = foodBumpEnabled;
+            configuration.Save();
+        }
+
+        var foodBumpAmount = configuration.WaistFoodEatenBumpAmount;
+        if (ImGui.SliderFloat("Food Eaten Bump Amount", ref foodBumpAmount, 0.00f, 1.00f, "%.2f"))
+        {
+            configuration.WaistFoodEatenBumpAmount = foodBumpAmount;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("Adds this amount once per food item eaten (whether that's your first bite or " +
+            "refreshing an already-active buff), ON TOP OF the Well Fed rates above rather than instead " +
+            "of them. Eases in gradually rather than jumping instantly - eating several times in a row " +
+            "just queues up more to ease in, it doesn't stack as a sudden jump.");
+
         ImGui.Separator();
         ImGui.Text("Status");
 

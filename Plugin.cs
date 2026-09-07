@@ -315,6 +315,43 @@ public sealed class Plugin : IDalamudPlugin
     // lastUnconscious tracker).
     private bool waistScaleFrozenUntilRevive;
 
+    // Reintroduced per request - a flat, event-triggered bump on top of
+    // the continuous growth/decay above, layered back in as an
+    // ADDITIONAL mechanic rather than replacing the continuous one.
+    // Unlike the original (pre-continuous-rewrite) version, which added
+    // WaistIncreasePerFood directly and instantly, this now eases in
+    // gradually - see pendingWaistFoodBumpAmount and
+    // WaistFoodBumpEaseRatePerSecond below, and the waist block in
+    // OnFrameworkUpdate for where it's actually applied.
+    private bool lastFoodBuffActiveForBump;
+    private float? lastRemainingSecondsForBump;
+
+    // Accumulates whenever a food-consumed edge fires (see
+    // OnFrameworkUpdate's waist block) and drains back down to 0 over
+    // subsequent frames as it's gradually applied onto
+    // Configuration.CurrentWaistScale, at most
+    // WaistFoodBumpEaseRatePerSecond scale units per second - so eating
+    // multiple times in quick succession (before a previous bump has
+    // fully eased in) just adds to the queue rather than restarting or
+    // being ignored, and the visible result is always a smooth ramp,
+    // never an instant jump, regardless of how large
+    // WaistFoodEatenBumpAmount is configured.
+    private float pendingWaistFoodBumpAmount;
+
+    // Not user-configurable, per request (only the bump AMOUNT itself
+    // is meant to be a slider) - a fixed rate at which
+    // pendingWaistFoodBumpAmount above gets applied. At this rate, the
+    // default WaistFoodEatenBumpAmount (0.1) takes 5 seconds to fully
+    // ease in; a larger configured bump takes proportionally longer,
+    // not the same fixed duration regardless of size - mirrors how
+    // Configuration.ScaleTransitionRate (a per-second max-step, not a
+    // fixed total duration) already works for breast scale's own
+    // easing, rather than the moan ramp's fixed-20-second-duration
+    // approach, which is a poorer fit here since this needs to handle
+    // an unbounded, possibly-repeatedly-added queue rather than a
+    // single one-shot ramp to a specific target.
+    private const float WaistFoodBumpEaseRatePerSecond = 0.02f;
+
     // The scale actually pushed to Customize+, eased toward
     // ComputeCurrentScale()'s target every frame rather than snapping to
     // it - this is what makes eating food, Provoke going on cooldown,
@@ -798,14 +835,19 @@ public sealed class Plugin : IDalamudPlugin
         // game restart - see Configuration.LastUpdateUnixSeconds's own
         // doc comment.
         //
-        // UPDATED per request: no more discrete "food consumed" event
-        // detection at all - the mechanic is now purely a function of
-        // Well Fed's current on/off state each frame. While active,
-        // scale grows continuously toward WaistMaxScale
+        // The continuous growth/decay mechanic here doesn't need
+        // discrete "food consumed" event detection at all - it's purely
+        // a function of Well Fed's current on/off state each frame.
+        // While active, scale grows continuously toward WaistMaxScale
         // (WaistIncreasePerHourWhileWellFed); while inactive, it decays
-        // continuously toward WaistMinScale (WaistReductionPerHour,
-        // unchanged from before) - the two are mutually exclusive every
-        // frame.
+        // continuously toward WaistMinScale (WaistReductionPerHour) -
+        // the two are mutually exclusive every frame. A SEPARATE flat
+        // per-food-eaten bump was reintroduced per a later request
+        // (WaistFoodEatenBumpEnabled/WaistFoodEatenBumpAmount below,
+        // eased in gradually rather than applied instantly) - that one
+        // DOES need discrete edge detection, since "was food just
+        // eaten" genuinely is a one-time event unlike the continuous
+        // mechanic above.
         var nowUnix = NowUnixSeconds();
         var elapsedWaistSeconds = Configuration.LastUpdateUnixSeconds is { } lastUnix ? nowUnix - lastUnix : 0d;
         Configuration.LastUpdateUnixSeconds = nowUnix;
@@ -817,7 +859,28 @@ public sealed class Plugin : IDalamudPlugin
         // just two independent consumers of it, so this is read only
         // once per frame rather than redundantly polling player.StatusList
         // twice.
-        var (isWellFedActive, _) = foodTracker.GetFoodBuffState();
+        var (isWellFedActive, remainingSecondsForBump) = foodTracker.GetFoodBuffState();
+
+        // Reintroduced food-consumed edge detection, per request -
+        // scoped specifically to the flat-bump feature below (the
+        // continuous growth/decay above doesn't need it, since it's
+        // purely a function of Well Fed's current on/off state, not a
+        // discrete event). Same two-edges-count logic as the original
+        // pre-continuous-rewrite version: the buff transitioning from
+        // not-active to active (first bite), or the buff already being
+        // active and RemainingSeconds jumping UP compared to last frame
+        // (eating a second item while still buffed, refreshing/
+        // extending the timer) - remaining time only ever counts down
+        // on its own, so any rise can only mean a new food item was
+        // just consumed.
+        var foodConsumedEdge = (isWellFedActive && !lastFoodBuffActiveForBump)
+            || (isWellFedActive && lastFoodBuffActiveForBump
+                && remainingSecondsForBump is { } r && lastRemainingSecondsForBump is { } lastR && r > lastR + 1f);
+        lastFoodBuffActiveForBump = isWellFedActive;
+        lastRemainingSecondsForBump = remainingSecondsForBump;
+
+        if (Configuration.WaistFoodEatenBumpEnabled && foodConsumedEdge)
+            pendingWaistFoodBumpAmount += Configuration.WaistFoodEatenBumpAmount;
 
         if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive && elapsedWaistSeconds > 0d)
         {
@@ -832,6 +895,20 @@ public sealed class Plugin : IDalamudPlugin
                     Configuration.WaistMinScale,
                     Configuration.WaistReductionPerHour,
                     elapsedWaistSeconds);
+
+            // Gradually apply whatever's still pending from the flat
+            // bump above, ADDITIVE on top of the continuous growth/decay
+            // that just happened this same frame - a genuinely separate,
+            // event-triggered mechanic layered on top of the
+            // state-based one, not a replacement for it. Clamped the
+            // same as everything else that writes to CurrentWaistScale.
+            if (pendingWaistFoodBumpAmount > 0f)
+            {
+                var step = System.Math.Min(pendingWaistFoodBumpAmount, WaistFoodBumpEaseRatePerSecond * (float)elapsedWaistSeconds);
+                Configuration.CurrentWaistScale = WaistScale.Clamp(
+                    Configuration.CurrentWaistScale + step, Configuration.WaistMinScale, Configuration.WaistMaxScale);
+                pendingWaistFoodBumpAmount -= step;
+            }
         }
 
         if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)

@@ -706,6 +706,22 @@ public sealed class Configuration : IPluginConfiguration
     public float WaistReductionPerHour { get; set; } = 0.2f;
 
     /// <summary>
+    /// Reintroduced per request - a flat, event-triggered bump ADDED ON
+    /// TOP OF the continuous growth/decay above (not a replacement for
+    /// it), applied once per detected food-consumed edge (see
+    /// OnFrameworkUpdate's foodConsumedEdge). Unlike the original
+    /// pre-continuous-rewrite version of this same idea, the bump amount
+    /// no longer gets added to CurrentWaistScale instantly - it's queued
+    /// into pendingWaistFoodBumpAmount and eased in gradually instead
+    /// (see WaistFoodBumpEaseRatePerSecond), so eating never causes a
+    /// visible jump. On by default.
+    /// </summary>
+    public bool WaistFoodEatenBumpEnabled { get; set; } = true;
+
+    /// <summary>Amount queued for gradual application per detected food-consumed edge when WaistFoodEatenBumpEnabled is on. 0.1 by default, matching the original pre-continuous-rewrite version's own default.</summary>
+    public float WaistFoodEatenBumpAmount { get; set; } = 0.1f;
+
+    /// <summary>
     /// The actual running waist scale value. float.NaN is the "never
     /// initialized" sentinel - Plugin.cs seeds it from
     /// WaistBaselineScale the first time it sees NaN, rather than this
