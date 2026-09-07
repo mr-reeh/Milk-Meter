@@ -202,6 +202,16 @@ public sealed class SettingsWindow(
             ImGui.TextDisabled("Scale freezes at Minimum Scaling while dead - no Passive Scale Gen happens - " +
                 "until you're revived, then resumes normally.");
 
+            var resetToBaselineOnDeath = configuration.ResetScaleToBaselineOnDeath;
+            if (ImGui.Checkbox("On Death Set Scale to Maximum Scaling (Out of Combat)", ref resetToBaselineOnDeath))
+            {
+                configuration.ResetScaleToBaselineOnDeath = resetToBaselineOnDeath;
+                configuration.Save();
+            }
+            ImGui.TextDisabled("Alternative to the Minimum Scaling option above - freezes at Maximum Scaling " +
+                "(Out of Combat) instead while dead, until revived. If both are checked, Minimum Scaling " +
+                "wins and this one is skipped.");
+
             var gcdReducesScale = configuration.GcdReducesScaleEnabled;
             if (ImGui.Checkbox("GCD Affects Scale", ref gcdReducesScale))
             {

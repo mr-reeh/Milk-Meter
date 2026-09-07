@@ -446,9 +446,24 @@ public sealed class Configuration : IPluginConfiguration
     /// regardless of whether this toggle is still on at that point).
     /// Checked every frame, not just while Mode == Job, so a death that
     /// happens while you're on Food or Mana mode still resets/freezes it
-    /// in the background. Off by default.
+    /// in the background. On by default. If BOTH this and
+    /// ResetScaleToBaselineOnDeath below are checked at once, this one
+    /// (Minimum Scaling) takes priority - see Plugin.cs's death-check
+    /// block for exactly where that precedence is decided.
     /// </summary>
     public bool ResetJobScaleToCombatFloorOnDeath { get; set; } = true;
+
+    /// <summary>
+    /// Alternative to ResetJobScaleToCombatFloorOnDeath above, per
+    /// request - resets to JobBaselineScale (Maximum Scaling Out of
+    /// Combat) instead of the floor, otherwise identical behavior
+    /// (freezes there until revival, checked every frame regardless of
+    /// Mode). Off by default. If BOTH this and the Minimum-Scaling
+    /// version above are checked at once, the Minimum-Scaling one wins -
+    /// this one is simply skipped in that case, rather than either
+    /// combining somehow or the two racing frame-to-frame.
+    /// </summary>
+    public bool ResetScaleToBaselineOnDeath { get; set; } = false;
 
     /// <summary>
     /// If true, every time the player's HP decreases while in combat
@@ -710,6 +725,31 @@ public sealed class Configuration : IPluginConfiguration
     /// apply decades of decay on its first load.
     /// </summary>
     public double? LastUpdateUnixSeconds { get; set; }
+
+    /// <summary>
+    /// If true, dying immediately resets CurrentWaistScale to
+    /// WaistMinScale and FREEZES it there - no decay/growth
+    /// (WaistScale.ApplyDecay/ApplyGrowth) happens at all while frozen,
+    /// so waist scale stays pinned at the floor until the player is
+    /// revived. Mirrors ResetJobScaleToCombatFloorOnDeath above exactly,
+    /// just for the waist meter and independently toggleable - see
+    /// Plugin.cs's death-check block, which handles both meters' resets
+    /// in the same place since they both key off the same
+    /// ConditionFlag.Unconscious edge. Off by default. If BOTH this and
+    /// ResetWaistScaleToBaselineOnDeath below are checked at once, this
+    /// one (Minimum Scaling) takes priority, same precedence rule as the
+    /// breast-scale pair above.
+    /// </summary>
+    public bool ResetWaistScaleToMinimumOnDeath { get; set; } = false;
+
+    /// <summary>
+    /// Alternative to ResetWaistScaleToMinimumOnDeath above, per request
+    /// - resets to WaistBaselineScale instead of the floor, otherwise
+    /// identical behavior (freezes there until revival). Off by
+    /// default. Skipped if ResetWaistScaleToMinimumOnDeath above is also
+    /// checked, same precedence rule as the breast-scale pair.
+    /// </summary>
+    public bool ResetWaistScaleToBaselineOnDeath { get; set; } = false;
 
     /// <summary>
     /// If true, the HUD gauge fades out after HudFadeIdleSeconds of no

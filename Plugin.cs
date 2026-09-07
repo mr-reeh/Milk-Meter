@@ -306,6 +306,15 @@ public sealed class Plugin : IDalamudPlugin
     // freeze never gets stuck active even if the setting changes mid-death.
     private bool jobScaleFrozenUntilRevive;
 
+    // Mirror of jobScaleFrozenUntilRevive above, for the waist meter -
+    // independently tracked since WaistScalingPaused is already
+    // independent of ScalingPaused, and the two meters' own death-reset
+    // toggles are independently checkable too. Set/cleared in the SAME
+    // death-check block as jobScaleFrozenUntilRevive (both key off the
+    // same ConditionFlag.Unconscious edge, no need for a second
+    // lastUnconscious tracker).
+    private bool waistScaleFrozenUntilRevive;
+
     // The scale actually pushed to Customize+, eased toward
     // ComputeCurrentScale()'s target every frame rather than snapping to
     // it - this is what makes eating food, Provoke going on cooldown,
@@ -791,7 +800,7 @@ public sealed class Plugin : IDalamudPlugin
         // twice.
         var (isWellFedActive, _) = foodTracker.GetFoodBuffState();
 
-        if (!Configuration.WaistScalingPaused && elapsedWaistSeconds > 0d)
+        if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive && elapsedWaistSeconds > 0d)
         {
             Configuration.CurrentWaistScale = isWellFedActive
                 ? WaistScale.ApplyGrowth(
@@ -806,10 +815,16 @@ public sealed class Plugin : IDalamudPlugin
                     elapsedWaistSeconds);
         }
 
-        if (!Configuration.WaistScalingPaused)
+        if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
         {
             // Defensive re-clamp in case Min/Max were edited at runtime
-            // to a range that no longer contains the current value.
+            // to a range that no longer contains the current value. Also
+            // skipped while frozen for death, same reasoning as the
+            // decay/growth block above - the whole point of the freeze
+            // is that CurrentWaistScale stays EXACTLY at whatever death
+            // set it to, and even a defensive re-clamp could move it if
+            // Min/Max were edited to a range that no longer contains
+            // that exact death-reset value.
             Configuration.CurrentWaistScale = WaistScale.Clamp(
                 Configuration.CurrentWaistScale, Configuration.WaistMinScale, Configuration.WaistMaxScale);
         }
@@ -903,21 +918,59 @@ public sealed class Plugin : IDalamudPlugin
         // earlier in this project, though it's well-established
         // community usage for death detection.
         //
+        // Handles BOTH meters' death-reset toggles in one place, since
+        // both key off the same Unconscious edge - breast scale
+        // (ResetJobScaleToCombatFloorOnDeath / ResetScaleToBaselineOnDeath,
+        // Minimum takes priority if both are checked) and waist scale
+        // (ResetWaistScaleToMinimumOnDeath / ResetWaistScaleToBaselineOnDeath,
+        // same Minimum-wins precedence), fully independently - either
+        // meter's toggles can be on, off, or set to either target
+        // without affecting the other.
+        //
         // The revival-clear (falling edge of unconscious) runs
-        // regardless of whether ResetJobScaleToCombatFloorOnDeath is
-        // still on, so an active freeze always gets released on revive
-        // even if the setting changed mid-death - it never gets stuck.
+        // regardless of whether any of the four toggles are still on,
+        // so an active freeze always gets released on revive even if
+        // the setting changed mid-death - it never gets stuck. Each
+        // meter's own frozen flag clears independently too, in case one
+        // meter revives its freeze before the other somehow would
+        // (they can't currently, since both key off the same player's
+        // same Unconscious state, but this keeps them from being
+        // needlessly coupled to each other's flag).
         {
             var unconscious = Condition[ConditionFlag.Unconscious];
-            if (Configuration.ResetJobScaleToCombatFloorOnDeath && unconscious && !lastUnconscious)
+            if (unconscious && !lastUnconscious)
             {
-                jobCurrentScale = Configuration.JobCombatFloorScale;
-                jobScaleFrozenUntilRevive = true;
-                forceImmediate = true;
+                if (Configuration.ResetJobScaleToCombatFloorOnDeath)
+                {
+                    jobCurrentScale = Configuration.JobCombatFloorScale;
+                    jobScaleFrozenUntilRevive = true;
+                    forceImmediate = true;
+                }
+                else if (Configuration.ResetScaleToBaselineOnDeath)
+                {
+                    jobCurrentScale = Configuration.JobBaselineScale;
+                    jobScaleFrozenUntilRevive = true;
+                    forceImmediate = true;
+                }
+
+                if (Configuration.ResetWaistScaleToMinimumOnDeath)
+                {
+                    Configuration.CurrentWaistScale = Configuration.WaistMinScale;
+                    waistScaleFrozenUntilRevive = true;
+                }
+                else if (Configuration.ResetWaistScaleToBaselineOnDeath)
+                {
+                    Configuration.CurrentWaistScale = Configuration.WaistBaselineScale;
+                    waistScaleFrozenUntilRevive = true;
+                }
             }
-            else if (!unconscious && lastUnconscious && jobScaleFrozenUntilRevive)
+            else if (!unconscious && lastUnconscious)
             {
-                jobScaleFrozenUntilRevive = false; // revived - passive regen resumes next tick
+                if (jobScaleFrozenUntilRevive)
+                    jobScaleFrozenUntilRevive = false; // revived - passive regen resumes next tick
+
+                if (waistScaleFrozenUntilRevive)
+                    waistScaleFrozenUntilRevive = false; // revived - decay/growth resumes next tick
             }
             lastUnconscious = unconscious;
         }
