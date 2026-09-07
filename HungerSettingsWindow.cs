@@ -174,7 +174,7 @@ public sealed class HungerSettingsWindow(
             configuration.WaistRationingManualBumpMultiplier = rationingMultiplier;
             configuration.Save();
         }
-        ImGui.TextDisabled("If the \"Meat and Mead\" buff is active at the moment food is eaten (from the " +
+        ImGui.TextDisabled("If the \"Rationing\" buff is active at the moment food is eaten (from the " +
             "Squadron Rationing Manual item, or the equivalent Free Company action), the bump amount " +
             "above is multiplied by this instead of applied plain - e.g. at the defaults, 0.10 becomes " +
             "0.15. Only checked at the instant of eating, not continuously.");

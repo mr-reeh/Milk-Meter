@@ -481,14 +481,15 @@ public sealed class Plugin : IDalamudPlugin
         if (args.Equals("statuslist", System.StringComparison.OrdinalIgnoreCase))
         {
             // Dumps every currently active status name/remaining-time
-            // pair to /xllog - added specifically to confirm the real
-            // in-game name of the "Meat and Mead" buff (applied by the
-            // Squadron Rationing Manual) before trusting
-            // FoodBuffTracker.IsMeatAndMeadActive()'s prefix match
-            // against it, same verification instinct as /milkmeter
-            // emotedebug for ModeParam values - but generically useful
-            // for confirming ANY status name this project might need to
-            // match against in the future too.
+            // pair to /xllog - this is exactly how "Rationing" (applied
+            // by the Squadron Rationing Manual) was confirmed as the
+            // real in-game status name, correcting an earlier guess of
+            // "Meat and Mead" based on wiki descriptions of the item's
+            // effect rather than the actual StatusList output - same
+            // verification instinct as /milkmeter emotedebug for
+            // ModeParam values, but generically useful for confirming
+            // ANY status name this project might need to match against
+            // in the future too.
             var player = ObjectTable.LocalPlayer;
             if (player is null)
             {
@@ -919,11 +920,11 @@ public sealed class Plugin : IDalamudPlugin
             // only at the instant of the edge itself (see
             // Configuration.WaistRationingManualBumpBonusEnabled's own
             // doc comment for why that's a deliberate choice, not a
-            // limitation). IsMeatAndMeadActive() is a separate query
-            // from the isWellFedActive read above - Meat and Mead and
+            // limitation). IsRationingActive() is a separate query
+            // from the isWellFedActive read above - Rationing and
             // Well Fed are entirely independent statuses.
             var bumpAmount = Configuration.WaistFoodEatenBumpAmount;
-            if (Configuration.WaistRationingManualBumpBonusEnabled && foodTracker.IsMeatAndMeadActive())
+            if (Configuration.WaistRationingManualBumpBonusEnabled && foodTracker.IsRationingActive())
                 bumpAmount *= Configuration.WaistRationingManualBumpMultiplier;
 
             pendingWaistFoodBumpAmount += bumpAmount;
