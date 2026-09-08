@@ -6,10 +6,20 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 namespace MilkMeter;
 
 /// <summary>
-/// Whether the player's current job has any tracked ability at all. Every
-/// tracked job now uses the same mechanic (see JobScale.ApplyGrowth) - there's
-/// no longer a per-job-category distinction in how the scale is computed,
-/// only in which ability name(s) are tracked.
+/// Whether the player's current job/class has any tracked ability, or is
+/// recognized at all. Per request, EVERY job and class in the game is
+/// now recognized - every base class, every combat job, Beastmaster (a
+/// Limited Job), and every crafter/gatherer - so NotTracked below should
+/// now only occur defensively (an unrecognized ClassJob, which shouldn't
+/// normally happen). "Recognized but no ability to track" (Beastmaster,
+/// crafters, gatherers - see TrackedAbilityNames' own doc comment for
+/// exactly why those specifically can't have one) still gets
+/// CombatGrowth, same as every job with a real tracked ability - the
+/// only difference is whether GetTrackedAbilityNames() comes back empty
+/// or populated for it. Every tracked job/class now uses the same
+/// mechanic (see JobScale.ApplyGrowth) - there's no longer a
+/// per-job-category distinction in how the scale is computed, only in
+/// which ability name(s), if any, are tracked.
 /// </summary>
 public enum JobTrackingKind
 {
@@ -19,11 +29,14 @@ public enum JobTrackingKind
 
 /// <summary>
 /// Tracks the recast state of whichever job-relevant ability(-ies) apply
-/// to the player's current job (Provoke plus each tank job's own extra
-/// abilities - see TrackedAbilityNames; Second Wind for melee/physical
-/// ranged DPS; Lucid Dreaming for casters/healers). Most non-tank jobs
-/// have exactly one tracked ability, but several tanks now have more -
-/// any one of them applies the overuse penalty (see Plugin.cs).
+/// to the player's current job/class (Provoke plus each tank job's own
+/// extra abilities - see TrackedAbilityNames; Second Wind for melee/
+/// physical ranged DPS; Lucid Dreaming for casters/healers; NONE for
+/// Beastmaster or any crafter/gatherer, which still get passive growth
+/// via CombatGrowth but have no ability-based way to shrink it back
+/// down). Most jobs with a real tracked ability have exactly one, but
+/// several tanks have more - any one of them applies the overuse penalty
+/// (see Plugin.cs).
 ///
 /// None of these abilities' own cooldowns drive the scale directly - each
 /// is only read as a "was it just used" pulse, which Plugin.cs uses to
@@ -63,42 +76,104 @@ public enum JobTrackingKind
 /// </summary>
 public sealed class JobBuffTracker
 {
-    // Job abbreviation -> ability name(s) to track for that job. Most
-    // jobs have one; several tanks now have more (any one firing applies
-    // its own overuse penalty - see Plugin.cs). Every tracked job feeds
-    // the same combat-growth mechanic - only which ability name(s) are
-    // watched differs. Extend to support more jobs.
+    // Job/class abbreviation -> ability name(s) to track for it. Most
+    // combat jobs have one; several tanks have more (any one firing
+    // applies its own overuse penalty - see Plugin.cs). An EMPTY array
+    // means the job/class is recognized and DOES get passive growth
+    // (GetTrackingKind() below returns CombatGrowth for any KEY present
+    // here, regardless of whether its list is empty) but has no
+    // ability-based way to shrink it back down - GCD/Damage
+    // Taken/Jumping (all mode-agnostic, see Plugin.cs) are the only
+    // levers left for those. Two genuinely distinct reasons a job/class
+    // ends up with an empty list rather than a real ability:
+    //   - Structurally can't use ANY tracked ability at all (Beastmaster
+    //     - a Limited Job explicitly barred from using Role Actions
+    //     entirely, confirmed via Square Enix's own official job guide
+    //     rather than assumed)
+    //   - Doesn't have an equivalent action/mechanic to this whole
+    //     combat-oriented system in the first place (every crafter and
+    //     gatherer - no Role Actions, no shared "GCD recast group" the
+    //     way combat jobs have one, and never actually enter
+    //     ConditionFlag.InCombat at all)
+    // Base classes (pre-Job-stone) are listed separately from their job
+    // counterparts, since ClassJob.Abbreviation genuinely differs
+    // between e.g. "GLA" and "PLD" until the soul crystal is attuned -
+    // but each base class tracks the SAME ability(-ies) its eventual job
+    // does, since Role Actions unlock progressively per class/job level
+    // and are available well before the job stone itself in every case
+    // (e.g. Gladiator gets Provoke long before Paladin's own soul
+    // crystal quest unlocks).
     private static readonly Dictionary<string, string[]> TrackedAbilityNames = new()
     {
         // Tanks - Provoke, plus each job's own extra tracked abilities.
         // Reprisal is also a tank role action (shared by all four, same
-        // as Provoke), 60s recast - added to every tank job's list.
+        // as Provoke), 60s recast - added to every tank job's list. Base
+        // classes share their eventual job's own list (see class doc
+        // comment above for why).
+        ["GLA"] = ["Provoke", "Reprisal"],
         ["PLD"] = ["Provoke", "Reprisal"],
+        ["MRD"] = ["Provoke", "Equilibrium", "Reprisal"],
         ["WAR"] = ["Provoke", "Equilibrium", "Reprisal"],
         ["DRK"] = ["Provoke", "Reprisal"],
         ["GNB"] = ["Provoke", "Reprisal"],
 
-        // Melee & physical ranged DPS - Second Wind
+        // Melee & physical ranged DPS - Second Wind. Base classes share
+        // their eventual job's own list.
+        ["PGL"] = ["Second Wind"],
         ["MNK"] = ["Second Wind"],
+        ["LNC"] = ["Second Wind"],
         ["DRG"] = ["Second Wind"],
+        ["ROG"] = ["Second Wind"],
         ["NIN"] = ["Second Wind"],
         ["SAM"] = ["Second Wind"],
         ["RPR"] = ["Second Wind"],
         ["VPR"] = ["Second Wind"],
+        ["ARC"] = ["Second Wind"], // Archer - the physical-ranged base class, not Arcanist
         ["BRD"] = ["Second Wind"],
         ["MCH"] = ["Second Wind"],
         ["DNC"] = ["Second Wind"],
 
-        // Healers & casters - Lucid Dreaming
+        // Healers & casters - Lucid Dreaming. Base classes share their
+        // eventual job's own list.
+        ["CNJ"] = ["Lucid Dreaming"],
         ["WHM"] = ["Lucid Dreaming"],
+        ["ACN"] = ["Lucid Dreaming"], // Arcanist - leads to both SCH and SMN, shares the same list either way
         ["SCH"] = ["Lucid Dreaming"],
         ["AST"] = ["Lucid Dreaming"],
         ["SGE"] = ["Lucid Dreaming"],
+        ["THM"] = ["Lucid Dreaming"],
         ["BLM"] = ["Lucid Dreaming"],
         ["SMN"] = ["Lucid Dreaming"],
         ["RDM"] = ["Lucid Dreaming"],
         ["PCT"] = ["Lucid Dreaming"],
         ["BLU"] = ["Lucid Dreaming"],
+
+        // Beastmaster - a Limited Job (like Blue Mage) explicitly barred
+        // from using ANY Role Action, confirmed via Square Enix's own
+        // official job guide (not assumed) - so unlike every combat job
+        // above, there is genuinely no ability to track here. Still
+        // gets passive growth (empty array, not a missing key - see the
+        // class-level comment above for the distinction that matters
+        // here) via GCD/Damage Taken/Jumping alone.
+        ["BST"] = [],
+
+        // Crafters (DoH) - no Role Actions, no shared combat GCD recast
+        // group, never enter ConditionFlag.InCombat. Passive growth
+        // still applies (empty array = recognized, not missing); no
+        // ability-based shrink exists for these at all currently.
+        ["CRP"] = [],
+        ["BSM"] = [],
+        ["ARM"] = [],
+        ["GSM"] = [],
+        ["LTW"] = [],
+        ["WVR"] = [],
+        ["ALC"] = [],
+        ["CUL"] = [],
+
+        // Gatherers (DoL) - same reasoning as crafters above.
+        ["MIN"] = [],
+        ["BTN"] = [],
+        ["FSH"] = [],
     };
 
     private readonly IObjectTable objectTable;
@@ -136,12 +211,22 @@ public sealed class JobBuffTracker
     /// <summary>
     /// Display-friendly version of GetTrackedAbilityNames() - joins
     /// multiple names (e.g. Warrior's "Provoke, Equilibrium") for the
-    /// settings window. Null if the current job isn't tracked.
+    /// settings window. Null if the current job/class isn't recognized
+    /// at all (GetTrackedAbilityNames() itself returned null). For a
+    /// RECOGNIZED job/class with no trackable ability (Beastmaster, any
+    /// crafter/gatherer - see TrackedAbilityNames' own doc comment for
+    /// why those get an empty array rather than being absent entirely),
+    /// returns a descriptive placeholder instead of an empty string, so
+    /// the settings window's "Tracked: {name}" line doesn't render as a
+    /// blank "Tracked: " with nothing after the colon.
     /// </summary>
     public string? GetTrackedAbilityDisplayName()
     {
         var names = GetTrackedAbilityNames();
-        return names is null ? null : string.Join(", ", names);
+        if (names is null)
+            return null;
+
+        return names.Length == 0 ? "None (growth only - no ability to shrink this job/class)" : string.Join(", ", names);
     }
 
     /// <returns>
@@ -276,9 +361,13 @@ public sealed class JobBuffTracker
         lines.Add($"Current job: {jobAbbreviation ?? "(no player)"}");
 
         var abilityNames = GetTrackedAbilityNames();
-        lines.Add($"Tracked names: {(abilityNames is null ? "(job not tracked)" : string.Join(", ", abilityNames))}");
+        lines.Add($"Tracked names: {(abilityNames is null
+            ? "(job/class not recognized at all)"
+            : abilityNames.Length == 0
+                ? "(none - job/class recognized, gets passive growth, but has no ability to shrink it)"
+                : string.Join(", ", abilityNames))}");
 
-        if (abilityNames is null)
+        if (abilityNames is null || abilityNames.Length == 0)
             return string.Join("\n", lines);
 
         foreach (var abilityName in abilityNames)

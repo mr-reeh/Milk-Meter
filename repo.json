@@ -3,7 +3,7 @@
     "Author": "MrReeh",
     "Name": "Milk Meter",
     "InternalName": "MilkMeter",
-    "AssemblyVersion": "1.4.0.0",
+    "AssemblyVersion": "1.3.0.0",
     "Description": "Drives Customize+ chest scale from your choice of source: a Food Buff timer, Mana percentage, or an in-combat Job Actions mode built around GCD usage, tracked job abilities, jumping, and damage taken. Displayed as an animated baby-bottle HUD gauge with configurable fill zones, a pause toggle, and an optional high-scale threshold effect (vignette, glow, heartbeat sound). Fully configurable in-game via a settings window. Requires Customize+. Local only: nobody else sees it.",
     "Punchline": "Turns your combat actions into a chest-scaling mini-game.",
     "ApplicableVersion": "any",

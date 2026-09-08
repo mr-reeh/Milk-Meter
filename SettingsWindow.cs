@@ -629,8 +629,10 @@ public sealed class SettingsWindow(
             var abilityName = getJobAbilityName();
             if (abilityName is null)
             {
-                ImGui.Text("Current Job: Not Tracked");
-                ImGui.TextDisabled("Switch to any combat job to use this mode.");
+                ImGui.Text("Current Job: Not Recognized");
+                ImGui.TextDisabled("This shouldn't normally happen - every job and class (including " +
+                    "crafters/gatherers) should be recognized. If you're seeing this, the game may have " +
+                    "added something new since this plugin was last updated.");
             }
             else
             {

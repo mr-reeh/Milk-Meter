@@ -17,7 +17,15 @@ three breast-scaling modes fits how you want it to play:
   for healers/casters, and so on), landing GCDs, jumping, and taking damage in combat can
   all be configured to shrink it back down. Everything is tunable in the settings window -
   how fast it grows, how much each action shrinks (or even grows) it, and how big or small
-  it's allowed to get.
+  it's allowed to get. Works on every job and class in the game - every base class, every
+  combat job, Beastmaster, and every crafter/gatherer all get passive growth. Beastmaster
+  (a Limited Job barred from using Role Actions at all) has no job-specific action to shrink
+  it back down with, but GCD/Jumping/Damage Taken all still work normally for it, same as
+  any combat job. Crafters and gatherers don't have any of that available - no Role
+  Actions, no shared combat GCD (crafting/gathering actions use an entirely separate recast
+  system), and they never actually enter combat - so Jumping (movement-based, works for
+  everyone) is really the only lever left for those, short of the manual `/milk <number>`
+  command or the gauge's own right-click reset.
 
 Switch between modes anytime with `/milkmeter mode food`, `/milkmeter mode mana`, or
 `/milkmeter mode job` - or just open the settings window and pick from there.
