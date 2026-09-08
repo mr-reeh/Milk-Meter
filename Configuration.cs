@@ -180,30 +180,22 @@ public sealed class Configuration : IPluginConfiguration
     /// never pulls scale down on its own; only using a tracked ability
     /// (JobOveruseBonus) does that. A rate of 0 OR BELOW means no
     /// passive growth at all (JobScale.ApplyGrowth's own internal check
-    /// is "growthPerSecond &lt;= 0f", not just "== 0f"). IMPORTANT: this
-    /// same value also feeds the /dazed drain rate below
-    /// (drainPerSecond = PassiveScaleGenPerSecond * DazedDrainRateMultiplier,
-    /// see Plugin.cs) - since DazedDrainRateMultiplier is always
-    /// positive, a negative PassiveScaleGenPerSecond makes that computed
-    /// drainPerSecond negative too, which ALSO trips ApplyDrain's own
-    /// "&lt;= 0f means no drain" check. In other words: the ENTIRE negative
-    /// half of this slider's range currently behaves identically to
-    /// exactly 0 for BOTH normal passive growth AND the /dazed drain -
-    /// there's no distinct "negative" effect yet, unlike
-    /// ExtraScaleGenPerSecond below, which does have one. This was
-    /// flagged to the user rather than silently redesigned, since making
-    /// it meaningful would require a real design decision about how it
-    /// should interact with the /dazed drain specifically.
+    /// is "growthPerSecond &lt;= 0f", not just "== 0f"). NO LONGER feeds
+    /// the /dazed drain rate or /shakedrink growth rate the way it
+    /// originally did - each of those is now its own flat, independent
+    /// per-second rate (DazedDrainRatePerSecond, ShakeDrinkGrowthRatePerSecond),
+    /// per request, so changing this value has no effect on either of
+    /// them anymore.
     /// </summary>
     public float PassiveScaleGenPerSecond { get; set; } = JobScale.DefaultPassiveScaleGenPerSecond;
 
     /// <summary>
     /// A second, independent per-second rate, applied on top of
     /// (in addition to) PassiveScaleGenPerSecond above - standalone and
-    /// NOT multiplicative of any other factor, unlike
-    /// PassiveScaleGenPerSecond (which gets scaled by
-    /// DazedDrainRateMultiplier or ShakeDrinkGrowthRateMultiplier
-    /// depending on state) - this value is used exactly as configured.
+    /// NOT related to any other rate, same as DazedDrainRatePerSecond/
+    /// WaterDrainRatePerSecond/ShakeDrinkGrowthRatePerSecond are now
+    /// each their own independent value too - this value is used
+    /// exactly as configured.
     /// IGNORES the in/out of combat ceiling switch entirely. A
     /// POSITIVE value grows toward JobUpperLimitScale (Maximum Scaling In
     /// Combat) regardless of actual combat state, the same way the
@@ -240,12 +232,17 @@ public sealed class Configuration : IPluginConfiguration
     public bool ShakeDrinkBoostEnabled { get; set; } = true;
 
     /// <summary>
-    /// How many times faster Passive Scale Gen runs while /shakedrink is
-    /// active - multiplies PassiveScaleGenPerSecond by this value for that
-    /// duration. 10x by default ("tremendously" faster, per the request
-    /// this was built for).
+    /// How much scale grows per second while /shakedrink is active - a
+    /// flat, independent rate, per request, NOT a multiplier of
+    /// PassiveScaleGenPerSecond the way this originally worked (a
+    /// changed config value for the base passive rate used to silently
+    /// change this too; it no longer does). 0.025 by default, matching
+    /// this feature's own effective rate under the old 5x-multiplier
+    /// design at PassiveScaleGenPerSecond's own default (0.005 * 5 =
+    /// 0.025), so existing behavior doesn't silently change for anyone
+    /// who hasn't touched either value.
     /// </summary>
-    public float ShakeDrinkGrowthRateMultiplier { get; set; } = 5.0f;
+    public float ShakeDrinkGrowthRatePerSecond { get; set; } = 0.025f;
 
     /// <summary>
     /// The ModeParam value that identifies /shakedrink specifically -
@@ -270,8 +267,8 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool DazedDrainBoostEnabled { get; set; } = true;
 
-    /// <summary>How many times faster than normal Passive Scale Gen's rate the drain runs while /dazed is active. 10x by default, matching ShakeDrinkGrowthRateMultiplier.</summary>
-    public float DazedDrainRateMultiplier { get; set; } = 7.0f;
+    /// <summary>How much scale drains per second while /dazed is active - a flat, independent rate, per request, no longer a multiplier of PassiveScaleGenPerSecond. 0.035 by default, matching this feature's own effective rate under the old 7x-multiplier design at PassiveScaleGenPerSecond's own default (0.005 * 7 = 0.035).</summary>
+    public float DazedDrainRatePerSecond { get; set; } = 0.035f;
 
     /// <summary>
     /// The floor the /dazed drain targets - a dedicated value separate
@@ -317,8 +314,8 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool WaterDrainBoostEnabled { get; set; } = true;
 
-    /// <summary>How many times faster than normal Passive Scale Gen's rate the drain runs while /water is active. 7x by default, matching DazedDrainRateMultiplier.</summary>
-    public float WaterDrainRateMultiplier { get; set; } = 7.0f;
+    /// <summary>How much scale drains per second while /water is active - a flat, independent rate, per request, no longer a multiplier of PassiveScaleGenPerSecond. 0.035 by default, matching this feature's own effective rate under the old 7x-multiplier design at PassiveScaleGenPerSecond's own default (0.005 * 7 = 0.035).</summary>
+    public float WaterDrainRatePerSecond { get; set; } = 0.035f;
 
     /// <summary>
     /// The floor the /water drain targets - a dedicated value separate

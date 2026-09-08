@@ -1700,7 +1700,7 @@ public sealed class Plugin : IDalamudPlugin
                 else if (dazedDrainActive)
                 {
                     var previousBreastScale = jobCurrentScale;
-                    var drainPerSecond = Configuration.PassiveScaleGenPerSecond * Configuration.DazedDrainRateMultiplier;
+                    var drainPerSecond = Configuration.DazedDrainRatePerSecond;
                     jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.DazedDrainFloorScale, drainPerSecond, deltaSeconds);
 
                     // Milk-to-Food transfer, per request: whatever
@@ -1746,9 +1746,9 @@ public sealed class Plugin : IDalamudPlugin
                 else if (waterDrainActive)
                 {
                     // Mirror of the dazedDrainActive branch above, just
-                    // against WaterDrainRateMultiplier/
+                    // against WaterDrainRatePerSecond/
                     // WaterDrainFloorScale instead of Dazed's own.
-                    var drainPerSecond = Configuration.PassiveScaleGenPerSecond * Configuration.WaterDrainRateMultiplier;
+                    var drainPerSecond = Configuration.WaterDrainRatePerSecond;
                     jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.WaterDrainFloorScale, drainPerSecond, deltaSeconds);
 
                     var waterBurstNow = ImGuiNowSeconds();
@@ -1763,7 +1763,7 @@ public sealed class Plugin : IDalamudPlugin
                     var ceiling = (shakeDrinkActive || inCombat) ? Configuration.JobUpperLimitScale : Configuration.JobBaselineScale;
 
                     var growthPerSecond = shakeDrinkActive
-                        ? Configuration.PassiveScaleGenPerSecond * Configuration.ShakeDrinkGrowthRateMultiplier
+                        ? Configuration.ShakeDrinkGrowthRatePerSecond
                         : Configuration.PassiveScaleGenPerSecond;
 
                     jobCurrentScale = JobScale.ApplyGrowth(jobCurrentScale, ceiling, growthPerSecond, deltaSeconds);
@@ -1781,12 +1781,14 @@ public sealed class Plugin : IDalamudPlugin
                 }
 
                 // Extra Scale Gen: a SECOND, independent rate, standalone
-                // and NOT multiplicative of any other factor -
-                // Configuration.ExtraScaleGenPerSecond is used exactly
-                // as configured, never scaled by DazedDrainRateMultiplier,
-                // WaterDrainRateMultiplier, ShakeDrinkGrowthRateMultiplier,
-                // or anything else the way
-                // PassiveScaleGenPerSecond above is. Gated behind
+                // and NOT related to DazedDrainRatePerSecond/
+                // WaterDrainRatePerSecond/ShakeDrinkGrowthRatePerSecond
+                // above (each of which is itself now its own flat,
+                // independent rate too, no longer a multiplier of
+                // PassiveScaleGenPerSecond the way they originally
+                // worked) or anything else - Configuration.ExtraScaleGenPerSecond
+                // is used exactly
+                // as configured. Gated behind
                 // !dazedDrainActive && !waterDrainActive && !moanRampActive
                 // per request, so
                 // it can no longer

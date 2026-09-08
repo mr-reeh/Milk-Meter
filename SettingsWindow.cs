@@ -332,10 +332,10 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
-            var shakeDrinkRate = configuration.ShakeDrinkGrowthRateMultiplier;
-            if (ImGui.SliderFloat("Shake Drink Growth Rate Multiplier", ref shakeDrinkRate, 1.0f, 30.0f, "%.1fx"))
+            var shakeDrinkRate = configuration.ShakeDrinkGrowthRatePerSecond;
+            if (ImGui.SliderFloat("Scale Increase (Per Second)", ref shakeDrinkRate, 0.000f, 0.200f, "%.3f"))
             {
-                configuration.ShakeDrinkGrowthRateMultiplier = shakeDrinkRate;
+                configuration.ShakeDrinkGrowthRatePerSecond = shakeDrinkRate;
                 configuration.Save();
             }
 
@@ -345,8 +345,9 @@ public sealed class SettingsWindow(
                 configuration.ShakeDrinkEmoteModeParam = shakeDrinkModeParam;
                 configuration.Save();
             }
-            ImGui.TextDisabled("While /shakedrink is active, Passive Scale Gen speeds up dramatically and " +
-                "targets Maximum Scaling (In Combat) even out of combat - reverting instantly once the " +
+            ImGui.TextDisabled("While /shakedrink is active, scale grows at the flat rate above (a " +
+                "separate, independent value - no longer tied to Passive Scale Gen) and targets Maximum " +
+                "Scaling (In Combat) even out of combat - reverting instantly once the " +
                 "emote stops. Default value (76) confirmed via /milkmeter emotedebug; -1 " +
                 "would match ANY looping emote instead, in case a game update ever changes it.");
 
@@ -357,10 +358,10 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
-            var dazedDrainRate = configuration.DazedDrainRateMultiplier;
-            if (ImGui.SliderFloat("Dazed Drain Rate Multiplier", ref dazedDrainRate, 1.0f, 30.0f, "%.1fx"))
+            var dazedDrainRate = configuration.DazedDrainRatePerSecond;
+            if (ImGui.SliderFloat("Scale Reduction (Per Second)##Dazed", ref dazedDrainRate, 0.000f, 0.200f, "%.3f"))
             {
-                configuration.DazedDrainRateMultiplier = dazedDrainRate;
+                configuration.DazedDrainRatePerSecond = dazedDrainRate;
                 configuration.Save();
             }
 
@@ -402,10 +403,10 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
-            var waterDrainRate = configuration.WaterDrainRateMultiplier;
-            if (ImGui.SliderFloat("Water Drain Rate Multiplier", ref waterDrainRate, 1.0f, 30.0f, "%.1fx"))
+            var waterDrainRate = configuration.WaterDrainRatePerSecond;
+            if (ImGui.SliderFloat("Scale Reduction (Per Second)##Water", ref waterDrainRate, 0.000f, 0.200f, "%.3f"))
             {
-                configuration.WaterDrainRateMultiplier = waterDrainRate;
+                configuration.WaterDrainRatePerSecond = waterDrainRate;
                 configuration.Save();
             }
 
