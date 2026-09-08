@@ -9,7 +9,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <RootNamespace>MilkMeter</RootNamespace>
     <AssemblyName>MilkMeter</AssemblyName>
-    <Version>1.3.0.0</Version>
+    <Version>1.4.0.0</Version>
     <!-- Required for JobScale.cs, which calls into FFXIVClientStructs'
          ActionManager via raw pointers (RecastDetail*) to read job
          ability cooldown timers. -->
