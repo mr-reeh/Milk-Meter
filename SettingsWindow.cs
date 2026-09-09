@@ -172,6 +172,19 @@ public sealed class SettingsWindow(
                 "- outside of that, a negative value here still works against ordinary passive " +
                 "growth.");
 
+            var outOfCombatScaleGen = configuration.OutOfCombatScaleGenPerSecond;
+            if (ImGui.SliderFloat("Out of Combat Scale Gen (Per Second)", ref outOfCombatScaleGen, -0.10f, 0.10f, "%.3f"))
+            {
+                configuration.OutOfCombatScaleGenPerSecond = outOfCombatScaleGen;
+                configuration.Save();
+            }
+            ImGui.TextDisabled("A THIRD independent rate, applied ONLY while out of combat - and unlike " +
+                "the two above, both signs pull toward the SAME target: Maximum Scaling (Out of " +
+                "Combat). Positive grows UP toward it and stops there, never going past. Negative " +
+                "drains DOWN toward it and stops there, never going below. So it always settles you " +
+                "back at that value from whichever side you're currently on, then holds there. Off (0) " +
+                "by default. Paused while /dazed's or /water's drain or a /milk moan ramp is running.");
+
             var combatFloor = configuration.JobCombatFloorScale;
             if (ImGui.SliderFloat("Minimum Scaling (Always)", ref combatFloor, 0.10f, 1.00f, "%.2f"))
             {

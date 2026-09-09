@@ -229,6 +229,28 @@ public sealed class Configuration : IPluginConfiguration
     public float ExtraScaleGenPerSecond { get; set; } = 0f;
 
     /// <summary>
+    /// A THIRD independent per-second rate, per request, applied only
+    /// while OUT of combat - and unlike every other rate in this file,
+    /// both of its signs converge on the SAME target
+    /// (JobBaselineScale, "Maximum Scaling - Out of Combat") rather than
+    /// heading for opposite bounds:
+    ///   - POSITIVE grows UP toward JobBaselineScale and stops there;
+    ///     it can never push past it.
+    ///   - NEGATIVE drains DOWN toward JobBaselineScale and stops there;
+    ///     it can never fall below it.
+    /// So whichever side of Baseline the scale currently sits on, a
+    /// value of the matching sign pulls it back to Baseline and holds it
+    /// there, while a value of the opposite sign simply does nothing
+    /// from that side (JobScale.ApplyGrowth returns unchanged when
+    /// already at/above its ceiling; ApplyDrain likewise when already
+    /// at/below its floor). Skipped entirely while a /dazed or /water
+    /// drain or a /milk moan ramp is running, same exclusions Extra
+    /// Scale Gen above uses, so it can't fight those within a tick. Off
+    /// (0) by default, so it has no effect unless explicitly configured.
+    /// </summary>
+    public float OutOfCombatScaleGenPerSecond { get; set; } = 0f;
+
+    /// <summary>
     /// If true, performing the /shakedrink looping emote (see
     /// EmoteLoopTracker) dramatically speeds up Passive Scale Gen and forces
     /// its ceiling to JobUpperLimitScale (Maximum Scaling In Combat)

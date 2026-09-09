@@ -1833,6 +1833,40 @@ public sealed class Plugin : IDalamudPlugin
                     else if (Configuration.ExtraScaleGenPerSecond < 0f)
                         jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.JobCombatFloorScale, -Configuration.ExtraScaleGenPerSecond, deltaSeconds);
                 }
+
+                // Out-of-Combat Scale Gen: a THIRD independent rate, per
+                // request - the distinguishing feature is that BOTH
+                // signs converge on the SAME target
+                // (JobBaselineScale / "Maximum Scaling - Out of
+                // Combat") rather than heading for opposite bounds the
+                // way ExtraScaleGenPerSecond's own two signs do:
+                //   - POSITIVE grows UP toward Baseline, and stops
+                //     there - it can never push past it (ApplyGrowth's
+                //     ceiling IS Baseline here, not JobUpperLimitScale)
+                //   - NEGATIVE drains DOWN toward Baseline, and stops
+                //     there - it can never fall below it (ApplyDrain's
+                //     floor IS Baseline here, not JobCombatFloorScale)
+                // So whichever side of Baseline scale currently sits on,
+                // a configured value of the matching sign pulls it back
+                // to Baseline and then holds it there - and a value of
+                // the OPPOSITE sign simply does nothing at all from that
+                // side (ApplyGrowth already at/above its ceiling, or
+                // ApplyDrain already at/below its floor, both of which
+                // return unchanged). Gated on being OUT of combat, per
+                // request - unlike every other rate in this method,
+                // which are all either combat-agnostic or
+                // combat-specific in the other direction. Also gated
+                // behind the same drain/ramp exclusions as Extra Scale
+                // Gen above, for the same reason: this shouldn't fight
+                // an actively-running /dazed or /water drain or a moan
+                // ramp within the same tick.
+                if (!inCombat && !dazedDrainActive && !waterDrainActive && !moanRampActive)
+                {
+                    if (Configuration.OutOfCombatScaleGenPerSecond > 0f)
+                        jobCurrentScale = JobScale.ApplyGrowth(jobCurrentScale, Configuration.JobBaselineScale, Configuration.OutOfCombatScaleGenPerSecond, deltaSeconds);
+                    else if (Configuration.OutOfCombatScaleGenPerSecond < 0f)
+                        jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.JobBaselineScale, -Configuration.OutOfCombatScaleGenPerSecond, deltaSeconds);
+                }
             }
         }
 
