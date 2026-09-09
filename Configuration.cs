@@ -229,7 +229,7 @@ public sealed class Configuration : IPluginConfiguration
     public float ExtraScaleGenPerSecond { get; set; } = 0f;
 
     /// <summary>
-    /// A THIRD independent per-second rate, per request, applied only
+    /// A THIRD independent rate, per request, applied only
     /// while OUT of combat - and unlike every other rate in this file,
     /// both of its signs converge on the SAME target
     /// (JobBaselineScale, "Maximum Scaling - Out of Combat") rather than
@@ -245,10 +245,21 @@ public sealed class Configuration : IPluginConfiguration
     /// already at/above its ceiling; ApplyDrain likewise when already
     /// at/below its floor). Skipped entirely while a /dazed or /water
     /// drain or a /milk moan ramp is running, same exclusions Extra
-    /// Scale Gen above uses, so it can't fight those within a tick. Off
+    /// Scale Gen above uses, so it can't fight those within a tick.
+    ///
+    /// Expressed PER MINUTE, per request - unlike PassiveScaleGenPerSecond
+    /// and ExtraScaleGenPerSecond above, which are both per-second.
+    /// Divided down to a per-second rate at the point of use in
+    /// Plugin.cs (JobScale.ApplyGrowth/ApplyDrain both expect
+    /// per-second), the same per-hour-to-per-second conversion the waist
+    /// meter's own rates already do. This unit difference is deliberate:
+    /// a "settle back toward Baseline" rate is naturally a much slower,
+    /// coarser thing than the per-second rates above, so a per-minute
+    /// slider gives usable precision across its whole range instead of
+    /// cramming everything useful into the first few thousandths. Off
     /// (0) by default, so it has no effect unless explicitly configured.
     /// </summary>
-    public float OutOfCombatScaleGenPerSecond { get; set; } = 0f;
+    public float OutOfCombatScaleGenPerMinute { get; set; } = 0f;
 
     /// <summary>
     /// If true, performing the /shakedrink looping emote (see

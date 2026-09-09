@@ -1860,12 +1860,19 @@ public sealed class Plugin : IDalamudPlugin
                 // Gen above, for the same reason: this shouldn't fight
                 // an actively-running /dazed or /water drain or a moan
                 // ramp within the same tick.
+                //
+                // OutOfCombatScaleGenPerMinute is a PER-MINUTE rate (see
+                // its own doc comment for why it differs in unit from
+                // the two per-second rates above), so it's divided by 60
+                // here before being handed to ApplyGrowth/ApplyDrain,
+                // which both expect a per-second rate.
                 if (!inCombat && !dazedDrainActive && !waterDrainActive && !moanRampActive)
                 {
-                    if (Configuration.OutOfCombatScaleGenPerSecond > 0f)
-                        jobCurrentScale = JobScale.ApplyGrowth(jobCurrentScale, Configuration.JobBaselineScale, Configuration.OutOfCombatScaleGenPerSecond, deltaSeconds);
-                    else if (Configuration.OutOfCombatScaleGenPerSecond < 0f)
-                        jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.JobBaselineScale, -Configuration.OutOfCombatScaleGenPerSecond, deltaSeconds);
+                    var outOfCombatPerSecond = Configuration.OutOfCombatScaleGenPerMinute / 60f;
+                    if (outOfCombatPerSecond > 0f)
+                        jobCurrentScale = JobScale.ApplyGrowth(jobCurrentScale, Configuration.JobBaselineScale, outOfCombatPerSecond, deltaSeconds);
+                    else if (outOfCombatPerSecond < 0f)
+                        jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.JobBaselineScale, -outOfCombatPerSecond, deltaSeconds);
                 }
             }
         }
