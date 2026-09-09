@@ -231,33 +231,34 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// A THIRD independent rate, per request, applied only
     /// while OUT of combat - and unlike every other rate in this file,
-    /// both of its signs converge on the SAME target
-    /// (JobBaselineScale, "Maximum Scaling - Out of Combat") rather than
-    /// heading for opposite bounds:
-    ///   - POSITIVE grows UP toward JobBaselineScale and stops there;
+    /// this one always converges on the SAME target
+    /// (JobBaselineScale, "Maximum Scaling - Out of Combat") from
+    /// EITHER side, since it's a magnitude only (0 to 1, never
+    /// negative) rather than a signed value:
+    ///   - Below Baseline, it GROWS UP toward Baseline and stops there;
     ///     it can never push past it.
-    ///   - NEGATIVE drains DOWN toward JobBaselineScale and stops there;
-    ///     it can never fall below it.
-    /// So whichever side of Baseline the scale currently sits on, a
-    /// value of the matching sign pulls it back to Baseline and holds it
-    /// there, while a value of the opposite sign simply does nothing
-    /// from that side (JobScale.ApplyGrowth returns unchanged when
-    /// already at/above its ceiling; ApplyDrain likewise when already
-    /// at/below its floor). Skipped entirely while a /dazed or /water
-    /// drain or a /milk moan ramp is running, same exclusions Extra
-    /// Scale Gen above uses, so it can't fight those within a tick.
+    ///   - Above Baseline, it DRAINS DOWN toward Baseline and stops
+    ///     there; it can never fall below it.
+    /// Direction is decided automatically each tick by which side of
+    /// Baseline the scale currently sits on - there's no sign to
+    /// configure, unlike ExtraScaleGenPerSecond above. Once it arrives
+    /// at Baseline it simply holds there (JobScale.ApplyGrowth returns
+    /// unchanged when already at/above its ceiling; ApplyDrain likewise
+    /// when already at/below its floor). Skipped entirely while a
+    /// /dazed or /water drain or a /milk moan ramp is running, same
+    /// exclusions Extra Scale Gen above uses, so it can't fight those
+    /// within a tick.
     ///
     /// Expressed PER MINUTE, per request - unlike PassiveScaleGenPerSecond
     /// and ExtraScaleGenPerSecond above, which are both per-second.
     /// Divided down to a per-second rate at the point of use in
     /// Plugin.cs (JobScale.ApplyGrowth/ApplyDrain both expect
     /// per-second), the same per-hour-to-per-second conversion the waist
-    /// meter's own rates already do. This unit difference is deliberate:
-    /// a "settle back toward Baseline" rate is naturally a much slower,
-    /// coarser thing than the per-second rates above, so a per-minute
-    /// slider gives usable precision across its whole range instead of
-    /// cramming everything useful into the first few thousandths. Off
-    /// (0) by default, so it has no effect unless explicitly configured.
+    /// meter's own rates already do. E.g. at 0.1/minute, scale at 0.7
+    /// (or 1.3) reaches Baseline (1.0, at default slider values) in
+    /// exactly 3 minutes - the 0.3 distance divided by the 0.1/minute
+    /// rate. Off (0) by default, so it has no effect unless explicitly
+    /// configured.
     /// </summary>
     public float OutOfCombatScaleGenPerMinute { get; set; } = 0f;
 

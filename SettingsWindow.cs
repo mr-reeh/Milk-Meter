@@ -173,20 +173,19 @@ public sealed class SettingsWindow(
                 "growth.");
 
             var outOfCombatScaleGen = configuration.OutOfCombatScaleGenPerMinute;
-            if (ImGui.SliderFloat("Out of Combat Scale Gen (Per Minute)", ref outOfCombatScaleGen, -1.00f, 1.00f, "%.3f"))
+            if (ImGui.SliderFloat("Out of Combat Scale Gen (Per Minute)", ref outOfCombatScaleGen, 0.00f, 1.00f, "%.3f"))
             {
                 configuration.OutOfCombatScaleGenPerMinute = outOfCombatScaleGen;
                 configuration.Save();
             }
-            ImGui.TextDisabled("A THIRD independent rate, applied ONLY while out of combat - and unlike " +
-                "the two above, both signs pull toward the SAME target: Maximum Scaling (Out of " +
-                "Combat). Positive grows UP toward it and stops there, never going past. Negative " +
-                "drains DOWN toward it and stops there, never going below. So it always settles you " +
-                "back at that value from whichever side you're currently on, then holds there. Note " +
-                "this one is PER MINUTE, not per second like the two above - e.g. 0.300 covers the " +
-                "default gap between Maximum (Out of Combat) and Maximum (In Combat) in about a " +
-                "minute. Off (0) " +
-                "by default. Paused while /dazed's or /water's drain or a /milk moan ramp is running.");
+            ImGui.TextDisabled("A THIRD independent rate, applied ONLY while out of combat - a magnitude " +
+                "only (no negative direction to configure), since it works BOTH ways automatically: " +
+                "below Maximum Scaling (Out of Combat) it grows UP toward it, above that value it " +
+                "drains DOWN toward it - either way it settles there and holds, never overshooting " +
+                "past it in either direction. E.g. at 0.1, scale at 0.7 (or 1.3) reaches 1.0 in exactly " +
+                "3 minutes (a 0.3 distance at 0.1/minute), at the default slider values. Note this one " +
+                "is PER MINUTE, not per second like the two above. Off (0) by default. Paused while " +
+                "/dazed's or /water's drain or a /milk moan ramp is running.");
 
             var combatFloor = configuration.JobCombatFloorScale;
             if (ImGui.SliderFloat("Minimum Scaling (Always)", ref combatFloor, 0.10f, 1.00f, "%.2f"))

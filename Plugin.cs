@@ -1866,13 +1866,28 @@ public sealed class Plugin : IDalamudPlugin
                 // the two per-second rates above), so it's divided by 60
                 // here before being handed to ApplyGrowth/ApplyDrain,
                 // which both expect a per-second rate.
-                if (!inCombat && !dazedDrainActive && !waterDrainActive && !moanRampActive)
+                //
+                // The rate itself is a magnitude only (0 to 1, never
+                // negative) - which DIRECTION it moves is decided
+                // automatically by which side of JobBaselineScale the
+                // scale currently sits on, per request, rather than by
+                // the sign of the configured value the way
+                // ExtraScaleGenPerSecond above works. Below Baseline it
+                // grows up toward it; above Baseline it drains down
+                // toward it; either way the target IS Baseline, so it
+                // can never overshoot past it in either direction, and
+                // once it arrives both branches naturally become no-ops
+                // (ApplyGrowth returns unchanged at/above its ceiling,
+                // ApplyDrain likewise at/below its floor) so it simply
+                // holds there.
+                if (!inCombat && !dazedDrainActive && !waterDrainActive && !moanRampActive
+                    && Configuration.OutOfCombatScaleGenPerMinute > 0f)
                 {
                     var outOfCombatPerSecond = Configuration.OutOfCombatScaleGenPerMinute / 60f;
-                    if (outOfCombatPerSecond > 0f)
+                    if (jobCurrentScale < Configuration.JobBaselineScale)
                         jobCurrentScale = JobScale.ApplyGrowth(jobCurrentScale, Configuration.JobBaselineScale, outOfCombatPerSecond, deltaSeconds);
-                    else if (outOfCombatPerSecond < 0f)
-                        jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.JobBaselineScale, -outOfCombatPerSecond, deltaSeconds);
+                    else if (jobCurrentScale > Configuration.JobBaselineScale)
+                        jobCurrentScale = JobScale.ApplyDrain(jobCurrentScale, Configuration.JobBaselineScale, outOfCombatPerSecond, deltaSeconds);
                 }
             }
         }
