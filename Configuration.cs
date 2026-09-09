@@ -40,23 +40,33 @@ public sealed class Configuration : IPluginConfiguration
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// If true, every mechanic that would modify or push the applied
-    /// chest scale is skipped entirely - passive growth, ability-use,
-    /// damage-taken, jumping, /dazed/guard, death-reset, the
-    /// ease-toward-target animation, and the Customize+ push itself.
+    /// If true, every AUTOMATIC mechanic that would modify or push the
+    /// applied chest scale is skipped - passive growth, ability-use,
+    /// damage-taken, jumping, /dazed/guard, death-reset. MANUAL commands
+    /// (/milk &lt;number&gt;, /milk minimum/maximum/moan) are a deliberate
+    /// exception, per request - they still take effect and become
+    /// visible even while paused (see OnFrameworkUpdate's own comment on
+    /// its pause-gated block for exactly how). The
+    /// ease-toward-target animation and the Customize+ push themselves
+    /// also keep running every frame regardless of this flag - that's
+    /// specifically what makes a manual command visible while paused;
+    /// they just have nothing new to reflect on a frame where no manual
+    /// command just ran, since the automatic side is frozen.
     /// Unlike Enabled above, this deliberately leaves the HUD gauge and
     /// its particle effects still rendering, just dimmed to 10% opacity
-    /// (frozen at whatever scale was applied at the moment of pausing)
+    /// (frozen at whatever scale was applied at the moment of pausing,
+    /// or wherever a manual command last moved it to)
     /// and following the same idle-fade/hover-reveal rules as any other
     /// state rather than being forced fully visible - the point is to
-    /// freeze scaling in place
+    /// freeze AUTOMATIC scaling in place
     /// while keeping the plugin's visible presence intact, not to hide
     /// it. The threshold effect (vignette/glow/heartbeat sound) is the
     /// one exception - it completely stops the instant this is true,
     /// per request, rather than continuing to evaluate against the
     /// frozen scale value. Toggled by left-clicking the HUD gauge
-    /// itself (see HudGaugeWindow.Draw()) or this checkbox in settings.
-    /// Off by default.
+    /// itself (see HudGaugeWindow.Draw()) or this checkbox in settings -
+    /// neither of those two toggle actions themselves changes the scale
+    /// value at all, only the boolean itself. Off by default.
     /// </summary>
     public bool ScalingPaused { get; set; } = false;
 

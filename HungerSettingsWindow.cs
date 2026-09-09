@@ -51,8 +51,9 @@ public sealed class HungerSettingsWindow(
             configuration.WaistScalingPaused = scalingPaused;
             configuration.Save();
         }
-        ImGui.TextDisabled("Freezes growth and decay in place - independent of the " +
-            "main Milk Meter window's own pause, which only affects breast scaling.");
+        ImGui.TextDisabled("Freezes AUTOMATIC growth and decay in place - independent of the " +
+            "main Milk Meter window's own pause, which only affects breast scaling. Manual commands " +
+            "(/food <number>, /food reset) still work and become visible even while paused.");
 
         var resetWaistToMinOnDeath = configuration.ResetWaistScaleToMinimumOnDeath;
         if (ImGui.Checkbox("On Death Set Waist Scale to Minimum Scaling", ref resetWaistToMinOnDeath))

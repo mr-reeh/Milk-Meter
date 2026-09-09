@@ -1019,47 +1019,34 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        // Scaling Paused: an early return covering everything below
-        // that would modify or push scale - passive growth, all the
-        // ability-use/damage-taken/jump/dazed/guard mechanics, the
-        // ease-toward-target animation, and the Customize+ push itself.
-        // Deliberately placed AFTER the two checks above (dazed-floor
-        // tracking and the scheduled burp), since neither of those
-        // actually changes scale - the burp is a sound effect already
-        // committed to before pausing, and the floor-tracking timestamp
-        // is a passive observation, not a mutation. Toggled by
-        // left-clicking the HUD gauge itself (see HudGaugeWindow.Draw())
-        // or the settings window checkbox - unlike Configuration.Enabled,
-        // this deliberately leaves the HUD gauge and its particle
-        // effects still rendering (frozen at whatever scale was applied
-        // at the moment of pausing, dimmed to 10%
-        // opacity rather than drawing a red X over it),
-        // rather than disabling the plugin's visible presence entirely.
-        // The threshold effect (vignette/glow/heartbeat sound) is the
-        // one exception - it completely stops the instant this is true,
-        // per request, rather than continuing to evaluate against the
-        // frozen scale value (see ThresholdEffectOverlay.Draw() and
+        // Scaling Paused, per a later request, no longer an early return
+        // here at all - it used to cover everything below (passive
+        // growth, ability-use/damage-taken/jump/dazed/guard mechanics,
+        // the ease-toward-target animation, AND the Customize+ push
+        // itself), but that meant even a manual command
+        // (/milk <number>, /food <number>, etc.) writing directly to
+        // jobCurrentScale/Configuration.CurrentWaistScale never actually
+        // became visible while paused, since the easing/push code that
+        // would reflect it never ran either. The actual gating now
+        // happens further below, scoped specifically to the AUTOMATIC
+        // mechanics (see that block's own comment for the full
+        // reasoning) - the easing/push/DTR-update code always runs
+        // every frame regardless of this flag now, which is what makes
+        // a manual command's effect actually visible while paused.
+        // Toggled by left-clicking the HUD gauge itself (see
+        // HudGaugeWindow.Draw()) or the settings window checkbox -
+        // unlike Configuration.Enabled, this deliberately leaves the HUD
+        // gauge and its particle effects still rendering (frozen at
+        // whatever scale was applied at the moment of pausing, dimmed to
+        // 10% opacity rather than drawing a red X over it), rather than
+        // disabling the plugin's visible presence entirely. The
+        // threshold effect (vignette/glow/heartbeat sound) is the one
+        // exception - it completely stops the instant this is true, per
+        // request, rather than continuing to evaluate against the frozen
+        // scale value (see ThresholdEffectOverlay.Draw() and
         // HudGaugeWindow's glow block, which each check this
         // independently, since they're driven by the separate UI-draw
         // callback rather than this method).
-        if (Configuration.ScalingPaused)
-        {
-            // Still refresh the DTR bar even while paused - otherwise,
-            // if ScalingPaused happens to already be true from the very
-            // first frame after plugin load, UpdateDtrBarEntry() further
-            // down this method would never run even once, leaving the
-            // entry's Text permanently unset (blank, but still
-            // reserving a slot, since Shown was set in the constructor)
-            // for as long as the plugin stays paused - which could be
-            // forever, if nothing else in the session happens to
-            // unpause it. Uses whatever GetAppliedScale() currently
-            // returns, which is itself frozen at its last value while
-            // paused (nothing updates currentAppliedScale during the
-            // early-return below), so this correctly shows the frozen
-            // percentage rather than a stale/uninitialized one.
-            UpdateDtrBarEntry();
-            return;
-        }
 
         var deltaSeconds = (float)framework.UpdateDelta.TotalSeconds;
 
@@ -1071,6 +1058,28 @@ public sealed class Plugin : IDalamudPlugin
         // manually - the status is simply no longer present either way,
         // so no separate handling is needed for that case.)
         var forceImmediate = false;
+
+        // Per request: "Scaling Paused" should block every AUTOMATIC
+        // mechanic (death-reset, damage-taken, GCD, jump, well-fed
+        // breast growth, and the whole Food/Mana/Job passive
+        // computation below) while still letting manual commands
+        // (/milk <number>, /milk minimum/maximum/moan, /food <number>,
+        // /food reset) take effect - those write jobCurrentScale/
+        // Configuration.CurrentWaistScale directly from their own
+        // command handlers, entirely independent of this method, so
+        // skipping this block doesn't block them; it only blocks the
+        // automatic recomputation that would otherwise fight with
+        // whatever a manual command just set. Everything from here
+        // down to targetScale's own computation further below is
+        // wrapped in this single check - the easing/push/DTR-update
+        // code AFTER that point still runs unconditionally every frame
+        // regardless of this flag, which is specifically what makes a
+        // manual command's effect actually visible while paused: previously,
+        // this whole method returned early the instant ScalingPaused was
+        // true, which meant even a direct write from a manual command
+        // never got eased toward or pushed to Customize+ until unpaused.
+        if (!Configuration.ScalingPaused)
+        {
 
         // Death reset check runs every frame regardless of Mode, so a
         // death that happens while on Food/Mana mode still resets the
@@ -1827,7 +1836,27 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        var targetScale = ComputeCurrentScale();
+        } // end of "if (!Configuration.ScalingPaused)" - see its own comment above
+
+        // Food/Mana mode's own ComputeCurrentScale() path
+        // (FoodScale.Compute/ManaScale.Compute) recomputes fresh from
+        // LIVE game state every single call, entirely independent of
+        // the pause flag above - unlike Job mode, which just reads back
+        // whatever jobCurrentScale currently is (itself already frozen
+        // by the block above, except for direct manual-command writes,
+        // which is exactly what we still want reflected). Left
+        // unguarded, Food/Mana would keep tracking your real Well
+        // Fed/MP the whole time "paused," which isn't a freeze at all -
+        // so while paused AND on Food or Mana specifically, reuse
+        // currentAppliedScale itself as the target (diff against itself
+        // = 0, so the easing step below is a genuine no-op) instead of
+        // calling ComputeCurrentScale() again. Job mode is deliberately
+        // exempted from this substitution, since ComputeCurrentScale()
+        // is exactly how a manual command's direct jobCurrentScale
+        // write becomes visible while paused in the first place.
+        var targetScale = Configuration.ScalingPaused && Configuration.Mode != ScaleMode.Job
+            ? GetAppliedScale()
+            : ComputeCurrentScale();
 
         // Ease currentAppliedScale toward targetScale every single frame
         // (not just when we're about to push) so the animation rate is
