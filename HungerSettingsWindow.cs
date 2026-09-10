@@ -76,6 +76,17 @@ public sealed class HungerSettingsWindow(
         ImGui.Separator();
         ImGui.Text("Scaling Model");
 
+        var waistTransitionRate = configuration.WaistScaleTransitionRate;
+        if (ImGui.SliderFloat("Scale Transition Rate (Per Second)", ref waistTransitionRate, 0.00f, 0.50f, "%.3f"))
+        {
+            configuration.WaistScaleTransitionRate = waistTransitionRate;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("How fast waist scale eases toward its target, in scale units per second - " +
+            "so changes animate smoothly instead of snapping. E.g. at 0.05, moving across the default " +
+            "0.4 range (0.8-1.2) takes about 8 seconds. Set to 0 for instant snapping. Independent of " +
+            "the breast gauge's own transition rate in the main window.");
+
         var useRemainingTime = configuration.WaistUseRemainingTimeMode;
         if (ImGui.Checkbox("Scale From Remaining Well Fed Time", ref useRemainingTime))
         {
@@ -83,32 +94,13 @@ public sealed class HungerSettingsWindow(
             configuration.Save();
         }
         ImGui.TextDisabled("When ON, waist scale is derived purely from how much Well Fed time is left " +
-            "right now - no buff at all is Minimum, and the two anchors below map onto Baseline and " +
-            "Maximum, sliding smoothly between them as the buff ticks down. Nothing is accumulated or " +
+            "right now - no buff at all is Minimum, and 90 minutes left is Maximum, sliding smoothly " +
+            "between them as the buff ticks down. Nothing is accumulated or " +
             "saved, so it's automatically correct after logging out, logging back in, or swapping " +
-            "characters (the game tracks the buff itself, per character). When OFF, the old model is " +
+            "characters (the game tracks the buff itself, per character). The server info bar shows " +
+            "30 minutes as 100%, 60 as 200%, and 90 as 300%. When OFF, the old model is " +
             "used instead: a running total driven by the Rates section further below. Each model " +
             "completely ignores the other's settings.");
-
-        if (configuration.WaistUseRemainingTimeMode)
-        {
-            var baselineMinutes = configuration.WaistRemainingTimeBaselineMinutes;
-            if (ImGui.SliderFloat("Minutes Left = Baseline", ref baselineMinutes, 1f, 120f, "%.0f min"))
-            {
-                configuration.WaistRemainingTimeBaselineMinutes = baselineMinutes;
-                configuration.Save();
-            }
-
-            var maximumMinutes = configuration.WaistRemainingTimeMaximumMinutes;
-            if (ImGui.SliderFloat("Minutes Left = Maximum", ref maximumMinutes, 1f, 180f, "%.0f min"))
-            {
-                configuration.WaistRemainingTimeMaximumMinutes = maximumMinutes;
-                configuration.Save();
-            }
-            ImGui.TextDisabled("NOTE: ordinary food tops out at 30 minutes (45 for HQ), plus 15 more from " +
-                "a Squadron Rationing Manual - so at the default 90, the Maximum end may never actually " +
-                "be reached in normal play. Lower it toward 60 if you want Maximum to be attainable.");
-        }
 
         ImGui.Separator();
         ImGui.Text("Waist Scaling Range");

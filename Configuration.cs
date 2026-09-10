@@ -103,6 +103,22 @@ public sealed class Configuration : IPluginConfiguration
     public float ScaleTransitionRate { get; set; } = 0.2f;
 
     /// <summary>
+    /// Waist equivalent of ScaleTransitionRate above, per request - how
+    /// fast the applied WAIST scale eases toward whatever the accumulator
+    /// or remaining-time model computed as its target, in scale units
+    /// per second. Independent of the chest rate so each meter can
+    /// animate at its own speed. Smooths every waist transition -
+    /// eating (in either model), a food-eaten bump, a death reset, a
+    /// /food command, or the remaining-time model recomputing after a
+    /// buff appears or expires - instead of snapping instantly.
+    /// Deliberately slower than the chest default (0.05 vs 0.2), since
+    /// the waist meter's own changes are generally larger, rarer, and
+    /// less moment-to-moment than the chest's. A rate of 0 means an
+    /// instant snap, matching the chest rate's own behavior at 0.
+    /// </summary>
+    public float WaistScaleTransitionRate { get; set; } = 0.05f;
+
+    /// <summary>
     /// Universal floor for the current job scale, regardless of combat
     /// state - the lowest using tracked abilities can push it to. The
     /// combat-growth mechanic (Provoke plus each tank job's own extra
@@ -721,22 +737,6 @@ public sealed class Configuration : IPluginConfiguration
     /// mode. On by default, per request.
     /// </summary>
     public bool WaistUseRemainingTimeMode { get; set; } = true;
-
-    /// <summary>How many minutes of remaining Well Fed time maps to WaistBaselineScale in remaining-time mode. 45 by default, per request. Below this it interpolates down toward WaistMinScale (reaching it at 0 minutes/no buff); above it, up toward WaistMaxScale.</summary>
-    public float WaistRemainingTimeBaselineMinutes { get; set; } = 45f;
-
-    /// <summary>
-    /// How many minutes of remaining Well Fed time maps to
-    /// WaistMaxScale in remaining-time mode. 90 by default, per request
-    /// - but note that ordinary food tops out well below this in
-    /// practice (30 min for normal quality, 45 for HQ, plus 15 more from
-    /// a Squadron Rationing Manual), so at 90 the Maximum end of the
-    /// range may be unreachable during normal play. Lower this toward
-    /// 60 if you want Maximum to actually be attainable. Remaining time
-    /// above this value simply holds at WaistMaxScale rather than
-    /// extrapolating past it.
-    /// </summary>
-    public float WaistRemainingTimeMaximumMinutes { get; set; } = 90f;
 
     /// <summary>Floor the waist scale decays down to and never goes below. 0.8 by default.</summary>
     public float WaistMinScale { get; set; } = 0.8f;

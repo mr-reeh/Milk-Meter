@@ -80,6 +80,22 @@ public sealed class Plugin : IDalamudPlugin
     // the same "never pushed yet" sentinel lastPushedScale already uses.
     private float lastPushedWaistScale = -1f;
 
+    // The waist scale actually pushed to Customize+, eased toward
+    // Configuration.CurrentWaistScale (the target) every frame at
+    // Configuration.WaistScaleTransitionRate - exact mirror of
+    // currentAppliedScale's own relationship to the breast target, added
+    // per request so waist changes animate rather than snapping. -1f is
+    // the same "not initialized yet" sentinel currentAppliedScale uses;
+    // first real tick starts it from neutral (1.0) so logging in
+    // mid-buff eases in instead of popping.
+    private float currentAppliedWaistScale = -1f;
+
+    // Last Well Fed remaining-seconds reading, stashed each frame by
+    // the waist block so UpdateDtrBarEntry() can compute the Food half's
+    // percentage from it in remaining-time mode without re-polling the
+    // status list. Null means no buff active (0%).
+    private float? lastKnownWellFedRemainingSeconds;
+
     // Only push an update to Customize+ when the applied scale actually
     // changes by a meaningful amount, and at most several times a second
     // - IPC calls are not free, and Customize+ has to reapply the whole
@@ -640,14 +656,16 @@ public sealed class Plugin : IDalamudPlugin
                 Configuration.JobUpperLimitScale);
             var roundedMilkPercent = (int)System.Math.Round(milkPercent);
 
-            var foodPercent = ScalePercent.ComputeTwoSegmentPercent(
-                Configuration.CurrentWaistScale,
-                Configuration.WaistMinScale,
-                Configuration.WaistBaselineScale,
-                Configuration.WaistMaxScale);
+            var foodPercent = Configuration.WaistUseRemainingTimeMode
+                ? WaistScale.ComputeRemainingTimePercent(lastKnownWellFedRemainingSeconds)
+                : ScalePercent.ComputeTwoSegmentPercent(
+                    Configuration.CurrentWaistScale,
+                    Configuration.WaistMinScale,
+                    Configuration.WaistBaselineScale,
+                    Configuration.WaistMaxScale);
             var roundedFoodPercent = (int)System.Math.Round(foodPercent);
 
-            Log.Information("[MilkMeter] DTR bar debug info (single combined entry, \"Food: X% | Milk: Y%\"):\n" +
+            Log.Information("[MilkMeter] DTR bar debug info (single combined entry, \"| Food: X% | Milk: Y% |\"):\n" +
                 $"ShowDtrBarEntry: {Configuration.ShowDtrBarEntry}\n" +
                 $"dtrBarEntry.Shown (actual current value read back from Dalamud): {dtrBarEntry.Shown}\n" +
                 $"--- Milk (breast) half ---\n" +
@@ -836,6 +854,7 @@ public sealed class Plugin : IDalamudPlugin
             lastPushedScale = -1f;
             lastPushedWaistScale = -1f;
             currentAppliedScale = -1f;
+            currentAppliedWaistScale = -1f;
             jobCurrentScale = Configuration.JobBaselineScale;
         }
 
@@ -896,6 +915,16 @@ public sealed class Plugin : IDalamudPlugin
         // twice.
         var (isWellFedActive, remainingSecondsForBump) = foodTracker.GetFoodBuffState();
 
+        // Stashed for UpdateDtrBarEntry() further down, which needs the
+        // same reading to compute the Food half's percentage in
+        // remaining-time mode - saves polling the whole status list a
+        // second time in the same frame just to re-read a value already
+        // in hand here. Frozen at its last value while paused, which is
+        // what we want: the bar should show whatever the (also frozen)
+        // scale corresponds to, not keep ticking down.
+        if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
+            lastKnownWellFedRemainingSeconds = remainingSecondsForBump;
+
         // Remaining-time mode, per request - an entirely separate model
         // from the accumulator below, so it short-circuits past ALL of
         // it (growth/decay rates, constant decrease, food-eaten bump,
@@ -915,10 +944,7 @@ public sealed class Plugin : IDalamudPlugin
                 Configuration.CurrentWaistScale = WaistScale.ComputeFromRemainingTime(
                     remainingSecondsForBump,
                     Configuration.WaistMinScale,
-                    Configuration.WaistBaselineScale,
-                    Configuration.WaistMaxScale,
-                    Configuration.WaistRemainingTimeBaselineMinutes,
-                    Configuration.WaistRemainingTimeMaximumMinutes);
+                    Configuration.WaistMaxScale);
             }
         }
         else
@@ -1961,6 +1987,28 @@ public sealed class Plugin : IDalamudPlugin
             ? targetScale
             : currentAppliedScale + System.Math.Sign(diff) * maxStep;
 
+        // Waist easing, per request - an exact mirror of the breast
+        // easing immediately above, just with its own independent rate
+        // (WaistScaleTransitionRate) and its own applied value.
+        // Configuration.CurrentWaistScale remains the TARGET (whatever
+        // the accumulator or remaining-time model computed for this
+        // frame); currentAppliedWaistScale is what actually gets pushed
+        // to Customize+ below, so a sudden target jump - a food-eaten
+        // bump, a death reset, a /food command, or the remaining-time
+        // model's own recompute after a buff appears/expires - now
+        // animates smoothly rather than snapping. Same first-ever-tick
+        // handling too: start from neutral (1.0) so logging in
+        // mid-buff eases in rather than popping.
+        if (currentAppliedWaistScale < 0f)
+            currentAppliedWaistScale = 1f;
+
+        var waistMaxStep = Configuration.WaistScaleTransitionRate * deltaSeconds;
+        var waistDiff = Configuration.CurrentWaistScale - currentAppliedWaistScale;
+
+        currentAppliedWaistScale = waistMaxStep <= 0f || System.Math.Abs(waistDiff) <= waistMaxStep
+            ? Configuration.CurrentWaistScale
+            : currentAppliedWaistScale + System.Math.Sign(waistDiff) * waistMaxStep;
+
         // Placed here specifically - after currentAppliedScale is
         // finalized for this frame, but BEFORE the IPC push throttle's
         // early-returns below - so the DTR bar text always stays
@@ -1981,24 +2029,26 @@ public sealed class Plugin : IDalamudPlugin
         // moved enough (or either has never been pushed at all yet -
         // the same -1f "never pushed" sentinel lastPushedScale already
         // used, now also applied to lastPushedWaistScale), not just
-        // chest alone. forceImmediate itself remains chest-specific
-        // (set by breast-scale events like the food buff appearing or a
-        // tracked job mechanic changing - see where it's set further up
-        // this method) - there's no waist equivalent, since the waist
-        // accumulator doesn't have discrete "should ignore the throttle
-        // for this one" moments the same way.
+        // chest alone. Both sides now compare their own EASED applied
+        // value (currentAppliedScale / currentAppliedWaistScale) rather
+        // than their raw target, so the throttle correctly keeps firing
+        // across an in-progress animation on either meter instead of
+        // deciding it's already arrived. forceImmediate itself remains
+        // chest-specific (set by breast-scale events like the food buff
+        // appearing or a tracked job mechanic changing - see where it's
+        // set further up this method).
         var now = ImGuiNowSeconds();
         var firstEverPush = lastPushedScale < 0f || lastPushedWaistScale < 0f;
         var chestDeltaBigEnough = System.Math.Abs(currentAppliedScale - lastPushedScale) >= MinScaleDelta;
-        var waistDeltaBigEnough = System.Math.Abs(Configuration.CurrentWaistScale - lastPushedWaistScale) >= MinScaleDelta;
+        var waistDeltaBigEnough = System.Math.Abs(currentAppliedWaistScale - lastPushedWaistScale) >= MinScaleDelta;
         var dueForPush = now - lastPushTime >= MinSecondsBetweenPushes;
 
         if (!forceImmediate && !firstEverPush && !(dueForPush && (chestDeltaBigEnough || waistDeltaBigEnough)))
             return;
 
-        customizePlus.SetScales(currentAppliedScale, Configuration.CurrentWaistScale);
+        customizePlus.SetScales(currentAppliedScale, currentAppliedWaistScale);
         lastPushedScale = currentAppliedScale;
-        lastPushedWaistScale = Configuration.CurrentWaistScale;
+        lastPushedWaistScale = currentAppliedWaistScale;
         lastPushTime = now;
     }
 
@@ -2077,18 +2127,26 @@ public sealed class Plugin : IDalamudPlugin
             Configuration.JobBaselineScale,
             Configuration.JobUpperLimitScale));
 
-        var foodPercent = (int)System.Math.Round(ScalePercent.ComputeTwoSegmentPercent(
-            Configuration.CurrentWaistScale,
-            Configuration.WaistMinScale,
-            Configuration.WaistBaselineScale,
-            Configuration.WaistMaxScale));
+        // Food half: in remaining-time mode this maps TIME directly onto
+        // percent (0% no buff, 100% at 30 min, 200% at 60, 300% at 90 -
+        // per request), entirely independent of the Min/Max scale
+        // sliders. In accumulator mode there's no meaningful "remaining
+        // time" to map, so it falls back to the scale-value-based
+        // two-segment 0-200% mapping that mode has always used.
+        var foodPercent = Configuration.WaistUseRemainingTimeMode
+            ? (int)System.Math.Round(WaistScale.ComputeRemainingTimePercent(lastKnownWellFedRemainingSeconds))
+            : (int)System.Math.Round(ScalePercent.ComputeTwoSegmentPercent(
+                Configuration.CurrentWaistScale,
+                Configuration.WaistMinScale,
+                Configuration.WaistBaselineScale,
+                Configuration.WaistMaxScale));
 
         if (milkPercent == lastDtrBarPercent && foodPercent == lastDtrBarWaistPercent)
             return;
 
         lastDtrBarPercent = milkPercent;
         lastDtrBarWaistPercent = foodPercent;
-        dtrBarEntry.Text = new SeStringBuilder().AddText($"Food: {foodPercent}% | Milk: {milkPercent}%").Build();
+        dtrBarEntry.Text = new SeStringBuilder().AddText($"| Food: {foodPercent}% | Milk: {milkPercent}% |").Build();
         dtrBarEntry.Tooltip = new SeStringBuilder().AddText(
             $"Milk Meter: Food (waist) {foodPercent}% (applied scale {Configuration.CurrentWaistScale:F2}), " +
             $"Milk (breast) {milkPercent}% (applied scale {GetAppliedScale():F2})").Build();
@@ -2145,11 +2203,14 @@ public sealed class Plugin : IDalamudPlugin
         // is specifically the breast-only right-click action (see
         // HudGaugeWindow's onRightClicked callback), not a reset of the
         // waist meter, so the combined push carries forward whatever
-        // Configuration.CurrentWaistScale currently is rather than
-        // resetting that too.
-        customizePlus.SetScales(1.0f, Configuration.CurrentWaistScale);
+        // the waist's own EASED applied value currently is rather than
+        // resetting that too (or snapping it to its un-eased target,
+        // which would visibly jolt the waist mid-animation just because
+        // the breast gauge happened to be right-clicked).
+        var waistNow = currentAppliedWaistScale < 0f ? 1.0f : currentAppliedWaistScale;
+        customizePlus.SetScales(1.0f, waistNow);
         lastPushedScale = 1.0f;
-        lastPushedWaistScale = Configuration.CurrentWaistScale;
+        lastPushedWaistScale = waistNow;
         lastPushTime = ImGuiNowSeconds();
         Log.Information("[MilkMeter] Gauge right-clicked - breast scale reset to 1.0.");
     }

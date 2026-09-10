@@ -93,6 +93,17 @@ public static class WaistScale
     }
 
     /// <summary>
+    /// The remaining Well Fed duration, in minutes, that maps to
+    /// WaistMaxScale - and, on the DTR bar, to 300%. Fixed rather than
+    /// configurable, per request. 90 minutes is chosen as a round
+    /// ceiling comfortably above what's normally reachable (30 min for
+    /// normal-quality food, 45 for HQ, plus 15 more from a Squadron
+    /// Rationing Manual), so in practice the top of the range acts as
+    /// headroom rather than somewhere you routinely sit.
+    /// </summary>
+    public const float MaxWellFedMinutes = 90f;
+
+    /// <summary>
     /// "Remaining time" mode, per request - an entirely different model
     /// from the ApplyDecay/ApplyGrowth accumulator above. Rather than a
     /// running total mutated a little each frame, this is a PURE
@@ -100,18 +111,16 @@ public static class WaistScale
     /// fresh every tick from a single live reading (much closer in
     /// shape to Milk Meter's own FoodScale.Compute than to the
     /// accumulator this sits alongside):
-    ///   - no buff at all        -> minScale
-    ///   - baselineMinutes left  -> baselineScale
-    ///   - maxMinutes left       -> maxScale
-    /// with linear interpolation between those anchors, in two separate
-    /// segments (0..baselineMinutes, then baselineMinutes..maxMinutes)
-    /// rather than one formula across the whole range - because
-    /// baselineScale isn't necessarily the exact midpoint of
-    /// minScale/maxScale, and baselineMinutes isn't necessarily the
-    /// midpoint of 0/maxMinutes; all five are independently
-    /// configurable. Same two-segment shape
-    /// ScalePercent.ComputeTwoSegmentPercent uses, just mapping minutes
-    /// onto scale rather than scale onto percent.
+    ///   - no buff at all           -> minScale
+    ///   - MaxWellFedMinutes left   -> maxScale
+    /// with a single straight linear interpolation between those two
+    /// anchors. Deliberately NOT a two-segment curve hinged on
+    /// WaistBaselineScale the way an earlier version was - per request,
+    /// Baseline is no longer a time anchor at all here (it still serves
+    /// its other purposes: the "Reset to Baseline" button, the
+    /// death-reset toggle, and the accumulator mode's own starting
+    /// value), so there's nothing to configure and no mid-point to
+    /// tune.
     ///
     /// PERSISTENCE, and why this mode needs none: the Well Fed status is
     /// tracked by the game itself, not by this plugin, and survives
@@ -125,41 +134,36 @@ public static class WaistScale
     /// inherently per-character since each character has its own status
     /// list.
     ///
-    /// Clamped to [minScale, maxScale] at the end regardless of how the
-    /// anchors are configured - remaining time above maxMinutes (which
-    /// can genuinely happen; see WaistRemainingTimeMaximumMinutes' own
-    /// doc comment) holds at maxScale rather than extrapolating past it.
+    /// Clamped to [minScale, maxScale] at the end - remaining time above
+    /// MaxWellFedMinutes (unreachable in normal play, but not worth
+    /// assuming) holds at maxScale rather than extrapolating past it.
     /// </summary>
-    public static float ComputeFromRemainingTime(
-        float? remainingSeconds,
-        float minScale,
-        float baselineScale,
-        float maxScale,
-        float baselineMinutes,
-        float maxMinutes)
+    public static float ComputeFromRemainingTime(float? remainingSeconds, float minScale, float maxScale)
     {
         if (remainingSeconds is not { } seconds || seconds <= 0f)
             return minScale;
 
         var minutes = seconds / 60f;
+        var t = System.Math.Min(1f, minutes / MaxWellFedMinutes);
+        return Clamp(minScale + (maxScale - minScale) * t, minScale, maxScale);
+    }
 
-        // Defensive: a zero-or-negative first segment would divide by
-        // zero below, and an out-of-order pair of anchors would produce
-        // a nonsensical result rather than just a steeper curve.
-        if (baselineMinutes <= 0f)
-            return Clamp(baselineScale, minScale, maxScale);
+    /// <summary>
+    /// The DTR (server info bar) percentage for remaining-time mode,
+    /// per request: 0% with no buff, 100% at 30 minutes left, 200% at
+    /// 60, 300% at 90 - a straight linear 30-minutes-per-100% mapping,
+    /// entirely independent of the Min/Baseline/Max SCALE sliders (so
+    /// changing those changes how big you get, but not what the bar
+    /// reads). Deliberately separate from
+    /// ScalePercent.ComputeTwoSegmentPercent, which the accumulator mode
+    /// still uses - that one maps a scale VALUE onto 0-200%, whereas
+    /// this maps remaining TIME onto 0-300%.
+    /// </summary>
+    public static float ComputeRemainingTimePercent(float? remainingSeconds)
+    {
+        if (remainingSeconds is not { } seconds || seconds <= 0f)
+            return 0f;
 
-        if (minutes <= baselineMinutes)
-        {
-            var t = minutes / baselineMinutes;
-            return Clamp(minScale + (baselineScale - minScale) * t, minScale, maxScale);
-        }
-
-        var secondSegmentSpan = maxMinutes - baselineMinutes;
-        if (secondSegmentSpan <= 0f)
-            return Clamp(baselineScale, minScale, maxScale);
-
-        var t2 = System.Math.Min(1f, (minutes - baselineMinutes) / secondSegmentSpan);
-        return Clamp(baselineScale + (maxScale - baselineScale) * t2, minScale, maxScale);
+        return (seconds / 60f) / 30f * 100f;
     }
 }
