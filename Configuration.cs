@@ -702,6 +702,42 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool WaistScalingPaused { get; set; } = false;
 
+    /// <summary>
+    /// If true, waist scale is derived entirely from HOW MUCH WELL FED
+    /// TIME IS LEFT, per request - a pure function recomputed fresh
+    /// every tick (see WaistScale.ComputeFromRemainingTime), rather than
+    /// the running accumulator every other waist setting below drives.
+    /// While this is on, ALL of these are ignored completely:
+    /// WaistIncreasePerHourWhileWellFed, WaistReductionPerHour,
+    /// WaistConstantDecreaseEnabled/PerHour, WaistFoodEatenBumpEnabled/
+    /// Amount, WaistRationingManualBumpBonusEnabled/Multiplier, and the
+    /// persisted CurrentWaistScale/LastUpdateUnixSeconds state (nothing
+    /// needs persisting - the game itself tracks the buff across logout,
+    /// and per-character rather than per-account, so this mode is
+    /// inherently correct on login and on character swap with no
+    /// catch-up math). The death-reset toggles and /food commands still
+    /// work, but only until the next tick recomputes from the buff -
+    /// there's no persistent value for them to durably change in this
+    /// mode. On by default, per request.
+    /// </summary>
+    public bool WaistUseRemainingTimeMode { get; set; } = true;
+
+    /// <summary>How many minutes of remaining Well Fed time maps to WaistBaselineScale in remaining-time mode. 45 by default, per request. Below this it interpolates down toward WaistMinScale (reaching it at 0 minutes/no buff); above it, up toward WaistMaxScale.</summary>
+    public float WaistRemainingTimeBaselineMinutes { get; set; } = 45f;
+
+    /// <summary>
+    /// How many minutes of remaining Well Fed time maps to
+    /// WaistMaxScale in remaining-time mode. 90 by default, per request
+    /// - but note that ordinary food tops out well below this in
+    /// practice (30 min for normal quality, 45 for HQ, plus 15 more from
+    /// a Squadron Rationing Manual), so at 90 the Maximum end of the
+    /// range may be unreachable during normal play. Lower this toward
+    /// 60 if you want Maximum to actually be attainable. Remaining time
+    /// above this value simply holds at WaistMaxScale rather than
+    /// extrapolating past it.
+    /// </summary>
+    public float WaistRemainingTimeMaximumMinutes { get; set; } = 90f;
+
     /// <summary>Floor the waist scale decays down to and never goes below. 0.8 by default.</summary>
     public float WaistMinScale { get; set; } = 0.8f;
 

@@ -91,4 +91,75 @@ public static class WaistScale
             return maxScale;
         return scale;
     }
+
+    /// <summary>
+    /// "Remaining time" mode, per request - an entirely different model
+    /// from the ApplyDecay/ApplyGrowth accumulator above. Rather than a
+    /// running total mutated a little each frame, this is a PURE
+    /// FUNCTION of how much Well Fed time is currently left, recomputed
+    /// fresh every tick from a single live reading (much closer in
+    /// shape to Milk Meter's own FoodScale.Compute than to the
+    /// accumulator this sits alongside):
+    ///   - no buff at all        -> minScale
+    ///   - baselineMinutes left  -> baselineScale
+    ///   - maxMinutes left       -> maxScale
+    /// with linear interpolation between those anchors, in two separate
+    /// segments (0..baselineMinutes, then baselineMinutes..maxMinutes)
+    /// rather than one formula across the whole range - because
+    /// baselineScale isn't necessarily the exact midpoint of
+    /// minScale/maxScale, and baselineMinutes isn't necessarily the
+    /// midpoint of 0/maxMinutes; all five are independently
+    /// configurable. Same two-segment shape
+    /// ScalePercent.ComputeTwoSegmentPercent uses, just mapping minutes
+    /// onto scale rather than scale onto percent.
+    ///
+    /// PERSISTENCE, and why this mode needs none: the Well Fed status is
+    /// tracked by the game itself, not by this plugin, and survives
+    /// logout - so on logging back in (or switching characters) the
+    /// remaining time read here is simply whatever the game currently
+    /// reports for THAT character, automatically correct with no
+    /// catch-up math and no saved state. That also quietly fixes a real
+    /// limitation of the accumulator mode: Configuration.CurrentWaistScale
+    /// is a single value shared across every character on the account,
+    /// so alts share one waist scale there, whereas this mode is
+    /// inherently per-character since each character has its own status
+    /// list.
+    ///
+    /// Clamped to [minScale, maxScale] at the end regardless of how the
+    /// anchors are configured - remaining time above maxMinutes (which
+    /// can genuinely happen; see WaistRemainingTimeMaximumMinutes' own
+    /// doc comment) holds at maxScale rather than extrapolating past it.
+    /// </summary>
+    public static float ComputeFromRemainingTime(
+        float? remainingSeconds,
+        float minScale,
+        float baselineScale,
+        float maxScale,
+        float baselineMinutes,
+        float maxMinutes)
+    {
+        if (remainingSeconds is not { } seconds || seconds <= 0f)
+            return minScale;
+
+        var minutes = seconds / 60f;
+
+        // Defensive: a zero-or-negative first segment would divide by
+        // zero below, and an out-of-order pair of anchors would produce
+        // a nonsensical result rather than just a steeper curve.
+        if (baselineMinutes <= 0f)
+            return Clamp(baselineScale, minScale, maxScale);
+
+        if (minutes <= baselineMinutes)
+        {
+            var t = minutes / baselineMinutes;
+            return Clamp(minScale + (baselineScale - minScale) * t, minScale, maxScale);
+        }
+
+        var secondSegmentSpan = maxMinutes - baselineMinutes;
+        if (secondSegmentSpan <= 0f)
+            return Clamp(baselineScale, minScale, maxScale);
+
+        var t2 = System.Math.Min(1f, (minutes - baselineMinutes) / secondSegmentSpan);
+        return Clamp(baselineScale + (maxScale - baselineScale) * t2, minScale, maxScale);
+    }
 }

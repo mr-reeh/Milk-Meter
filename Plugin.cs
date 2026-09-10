@@ -896,6 +896,34 @@ public sealed class Plugin : IDalamudPlugin
         // twice.
         var (isWellFedActive, remainingSecondsForBump) = foodTracker.GetFoodBuffState();
 
+        // Remaining-time mode, per request - an entirely separate model
+        // from the accumulator below, so it short-circuits past ALL of
+        // it (growth/decay rates, constant decrease, food-eaten bump,
+        // Rationing bonus, and the persisted-state catch-up above) and
+        // just recomputes waist scale fresh from the live buff reading
+        // every tick. Still respects WaistScalingPaused and the
+        // death-freeze flag, so pausing genuinely freezes it at its last
+        // value rather than continuing to track the buff - matching how
+        // breast scale's own Food/Mana modes were made to behave while
+        // paused. See WaistScale.ComputeFromRemainingTime and
+        // Configuration.WaistUseRemainingTimeMode for the full reasoning,
+        // including why this mode needs no persistence at all.
+        if (Configuration.WaistUseRemainingTimeMode)
+        {
+            if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
+            {
+                Configuration.CurrentWaistScale = WaistScale.ComputeFromRemainingTime(
+                    remainingSecondsForBump,
+                    Configuration.WaistMinScale,
+                    Configuration.WaistBaselineScale,
+                    Configuration.WaistMaxScale,
+                    Configuration.WaistRemainingTimeBaselineMinutes,
+                    Configuration.WaistRemainingTimeMaximumMinutes);
+            }
+        }
+        else
+        {
+
         // Reintroduced food-consumed edge detection, per request -
         // scoped specifically to the flat-bump feature below (the
         // continuous growth/decay above doesn't need it, since it's
@@ -979,6 +1007,8 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
+        } // end of accumulator-mode "else" - see WaistUseRemainingTimeMode's branch above
+
         if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
         {
             // Defensive re-clamp in case Min/Max were edited at runtime
@@ -988,7 +1018,9 @@ public sealed class Plugin : IDalamudPlugin
             // is that CurrentWaistScale stays EXACTLY at whatever death
             // set it to, and even a defensive re-clamp could move it if
             // Min/Max were edited to a range that no longer contains
-            // that exact death-reset value.
+            // that exact death-reset value. Applies in BOTH modes -
+            // remaining-time mode already clamps internally, so this is
+            // purely belt-and-braces there rather than load-bearing.
             Configuration.CurrentWaistScale = WaistScale.Clamp(
                 Configuration.CurrentWaistScale, Configuration.WaistMinScale, Configuration.WaistMaxScale);
         }
