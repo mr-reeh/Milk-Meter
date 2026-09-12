@@ -153,6 +153,13 @@ public sealed class Plugin : IDalamudPlugin
     // see Configuration.ResetJobScaleToCombatFloorOnDeath.
     private bool lastUnconscious;
 
+    // Tracks PvP state frame-to-frame so leaving a match can be detected
+    // as a falling edge (see the PvP-exit block in OnFrameworkUpdate).
+    // Not persisted - it's purely an in-session edge detector, and a
+    // saved value would be meaningless (and possibly wrong) on the next
+    // login anyway.
+    private bool lastWasPvpManaMode;
+
     // Persistent "current job scale" value - floored at
     // JobCombatFloorScale (via ability use or damage-taken reduction);
     // growth only ever pushes it up toward whichever ceiling applies
@@ -1304,6 +1311,33 @@ public sealed class Plugin : IDalamudPlugin
                     waistScaleFrozenUntilRevive = false; // revived - decay/growth resumes next tick
             }
             lastUnconscious = unconscious;
+        }
+
+        // Leaving PvP resets breast scale back to 100%
+        // (JobBaselineScale - the same value the DTR bar's Milk half
+        // reads as 100%), per request. Falling edge only: entering PvP
+        // doesn't reset anything, since PvP mode ignores jobCurrentScale
+        // entirely while active (ComputeCurrentScale reads MP instead),
+        // so whatever the Mini-Game was sitting at is simply parked
+        // untouched for the duration. Without this, leaving a match
+        // would snap straight back to that stale pre-match value, which
+        // is jarring after however many minutes of MP-driven scaling.
+        //
+        // forceImmediate so the transition pushes to Customize+ right
+        // away rather than waiting out the throttle - same treatment the
+        // death-reset above gets, and for the same reason: this is a
+        // discrete state change, not a gradual one. The easing still
+        // applies, so it animates back to 1.0 rather than snapping.
+        {
+            var pvpActive = IsPvpManaModeActive();
+            if (!pvpActive && lastWasPvpManaMode)
+            {
+                jobCurrentScale = Configuration.JobBaselineScale;
+                moanRampActive = false;
+                forceImmediate = true;
+                Log.Information($"[MilkMeter] Left PvP - breast scale reset to 100% ({Configuration.JobBaselineScale:F2}).");
+            }
+            lastWasPvpManaMode = pvpActive;
         }
 
         // Damage-taken check, also unconditional of Mode. HP is read
