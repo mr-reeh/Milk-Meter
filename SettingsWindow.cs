@@ -18,10 +18,10 @@ public sealed class SettingsWindow(
     Configuration configuration,
     Func<float> getTargetScale,
     Func<float> getAppliedScale,
-    Func<(bool Active, float? RemainingSeconds)> getFoodState,
     Func<float?> getManaFraction,
     Func<string?> getJobAbilityName,
-    Func<(bool InCombat, float CurrentScale)> getJobLiveState)
+    Func<(bool InCombat, float CurrentScale)> getJobLiveState,
+    Func<bool> getIsPvpManaActive)
 {
     public bool IsOpen;
 
@@ -63,28 +63,14 @@ public sealed class SettingsWindow(
         ImGui.Separator();
         ImGui.Text("Scale Source");
 
-        if (ImGui.RadioButton("Food Buff", configuration.Mode == ScaleMode.Food))
+        var pvpActive = getIsPvpManaActive();
+        if (pvpActive)
         {
-            configuration.Mode = ScaleMode.Food;
-            configuration.Save();
-        }
+            ImGui.Text("Currently: Mana (PvP match detected)");
+            ImGui.TextDisabled("Breast scale automatically switches to tracking your MP during PvP " +
+                "matches, then returns to the Mini-Game when the match ends. The Wolves' Den hub " +
+                "doesn't count - only actual matches.");
 
-        ImGui.SameLine();
-        if (ImGui.RadioButton("Mana", configuration.Mode == ScaleMode.Mana))
-        {
-            configuration.Mode = ScaleMode.Mana;
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.RadioButton("Mini-Game", configuration.Mode == ScaleMode.Job))
-        {
-            configuration.Mode = ScaleMode.Job;
-            configuration.Save();
-        }
-
-        if (configuration.Mode == ScaleMode.Mana)
-        {
             var inverted = configuration.ManaInverted;
             if (ImGui.Checkbox("Invert (Smaller at Full MP)", ref inverted))
             {
@@ -92,47 +78,21 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
         }
-
-        if (configuration.Mode == ScaleMode.Food)
+        else
         {
-            ImGui.Separator();
-            ImGui.Text("Food Scaling Range");
+            ImGui.Text("Currently: Mini-Game");
+            ImGui.TextDisabled("The Mini-Game is the only selectable source. During PvP matches it " +
+                "automatically switches to tracking your MP instead, then switches back when the match " +
+                "ends - nothing to configure for that.");
 
-            var minScale = configuration.FoodMinScale;
-            if (ImGui.SliderFloat("Minimum (No Buff)", ref minScale, 0.10f, 1.00f, "%.2f"))
+            var inverted = configuration.ManaInverted;
+            if (ImGui.Checkbox("Invert PvP Mana (Smaller at Full MP)", ref inverted))
             {
-                if (minScale > configuration.FoodMaxScale)
-                    minScale = configuration.FoodMaxScale;
-                configuration.FoodMinScale = minScale;
+                configuration.ManaInverted = inverted;
                 configuration.Save();
             }
-
-            var maxScale = configuration.FoodMaxScale;
-            if (ImGui.SliderFloat("Maximum (Fresh Buff)", ref maxScale, 1.00f, 2.00f, "%.2f"))
-            {
-                if (maxScale < configuration.FoodMinScale)
-                    maxScale = configuration.FoodMinScale;
-                configuration.FoodMaxScale = maxScale;
-                configuration.Save();
-            }
-
-            // NOTE: this still controls the taper WINDOW (how long before
-            // expiry the shrink begins, e.g. 30 min) - not a cap on the
-            // food's total duration (which can be up to 90 min and isn't
-            // something this plugin needs to know, since the taper only
-            // looks at time remaining). Label renamed per request; if you
-            // actually want a true duration cap, that's a different
-            // feature and this slider's behavior would need to change,
-            // not just its name.
-            var taperMinutes = configuration.FoodTaperMinutes;
-            if (ImGui.SliderFloat("Max Food Duration", ref taperMinutes, 1f, 90f, "%.0f"))
-            {
-                configuration.FoodTaperMinutes = taperMinutes;
-                configuration.Save();
-            }
-            ImGui.TextDisabled("How long before the buff runs out the shrink begins - not how fast it grows when you eat.");
         }
-        else if (configuration.Mode == ScaleMode.Job)
+
         {
             ImGui.Separator();
             ImGui.Text("Mini-Game Scaling");
@@ -612,11 +572,7 @@ public sealed class SettingsWindow(
             configuration.Save();
         }
 
-        var (currentMin, currentMax) = configuration.Mode switch
-        {
-            ScaleMode.Job => (configuration.JobCombatFloorScale, configuration.JobUpperLimitScale),
-            _ => (configuration.FoodMinScale, configuration.FoodMaxScale),
-        };
+        var (currentMin, currentMax) = (configuration.JobCombatFloorScale, configuration.JobUpperLimitScale);
         var range = System.MathF.Abs(currentMax - currentMin);
         var transitionSeconds = transitionRate > 0f ? range / transitionRate : 0f;
         ImGui.TextDisabled($"At this speed, going from min to max takes about {transitionSeconds:F1}s.");
@@ -627,21 +583,13 @@ public sealed class SettingsWindow(
         ImGui.Text($"Target Scale: {getTargetScale():F3}");
         ImGui.Text($"Applied Scale (Animating): {getAppliedScale():F3}");
 
-        if (configuration.Mode == ScaleMode.Food)
+        if (getIsPvpManaActive())
         {
-            var (active, remaining) = getFoodState();
-            if (active && remaining is not null)
-            {
-                var minutes = (int)(remaining.Value / 60f);
-                var seconds = (int)(remaining.Value % 60f);
-                ImGui.Text($"Well Fed Remaining: {minutes:D2}:{seconds:D2}");
-            }
-            else
-            {
-                ImGui.Text("Well Fed: Not Active");
-            }
+            ImGui.Text("Source: Mana (PvP match)");
+            var mana = getManaFraction();
+            ImGui.Text(mana is null ? "MP: Unavailable" : $"MP: {mana.Value * 100f:F0}%");
         }
-        else if (configuration.Mode == ScaleMode.Job)
+        else
         {
             var abilityName = getJobAbilityName();
             if (abilityName is null)
@@ -661,11 +609,6 @@ public sealed class SettingsWindow(
                 ImGui.Text($"Current Job Scale: {currentScale:F3}");
                 ImGui.Text($"Minimum Scaling: {configuration.JobCombatFloorScale:F2}  |  Applicable Maximum: {ceiling:F2}");
             }
-        }
-        else
-        {
-            var mana = getManaFraction();
-            ImGui.Text(mana is null ? "MP: Unavailable" : $"MP: {mana.Value * 100f:F0}%");
         }
 
         ImGui.Separator();

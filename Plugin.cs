@@ -119,7 +119,6 @@ public sealed class Plugin : IDalamudPlugin
 
     private float lastPushedScale = -1f;
     private double lastPushTime;
-    private bool lastFoodBuffActive;
 
     // Tracks each tracked ability's recast cooldown on/off-cooldown edge
     // (keyed by ability name, since a job can have more than one - e.g.
@@ -394,6 +393,21 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.Initialize(PluginInterface);
 
+        // Food and Mana were removed as user-selectable Scale Sources
+        // per request, leaving Mini-Game (ScaleMode.Job) as the only
+        // option - so migrate any config still saved on one of the old
+        // two, which would otherwise be stuck on a source with no UI
+        // left to change it from. Mana still activates automatically
+        // during PvP matches (see IsPvpManaModeActive), but that's
+        // driven by live PvP state rather than this saved value, which
+        // is now effectively always Job.
+        if (Configuration.Mode != ScaleMode.Job)
+        {
+            Log.Information($"[MilkMeter] Scale Source was {Configuration.Mode}, which is no longer selectable - switching to Mini-Game.");
+            Configuration.Mode = ScaleMode.Job;
+            Configuration.Save();
+        }
+
         // Seed the waist accumulator on first-ever run (or from a
         // pre-merge config that's never seen this field) from the
         // configured baseline - see Configuration.CurrentWaistScale's
@@ -415,10 +429,10 @@ public sealed class Plugin : IDalamudPlugin
             Configuration,
             ComputeCurrentScale,
             GetAppliedScale,
-            () => foodTracker.GetFoodBuffState(),
             () => manaTracker.GetManaFraction(),
             jobTracker.GetTrackedAbilityDisplayName,
-            () => (Condition[ConditionFlag.InCombat], jobCurrentScale));
+            () => (Condition[ConditionFlag.InCombat], jobCurrentScale),
+            IsPvpManaModeActive);
         hungerSettingsWindow = new HungerSettingsWindow(
             Configuration,
             () => Configuration.CurrentWaistScale,
@@ -874,23 +888,18 @@ public sealed class Plugin : IDalamudPlugin
 
         if (args.StartsWith("mode", System.StringComparison.OrdinalIgnoreCase))
         {
-            var modeArg = args.Length > 4 ? args[4..].Trim() : string.Empty;
-
-            if (modeArg.Equals("food", System.StringComparison.OrdinalIgnoreCase))
-                Configuration.Mode = ScaleMode.Food;
-            else if (modeArg.Equals("mana", System.StringComparison.OrdinalIgnoreCase))
-                Configuration.Mode = ScaleMode.Mana;
-            else if (modeArg.Equals("job", System.StringComparison.OrdinalIgnoreCase))
-                Configuration.Mode = ScaleMode.Job;
-            else
-            {
-                Log.Information("[MilkMeter] Usage: /milkmeter mode food|mana|job");
-                return;
-            }
-
-            Configuration.Save();
-            lastPushedScale = -1f; // force an immediate re-push under the new mode
-            Log.Information($"[MilkMeter] Mode set to {Configuration.Mode}");
+            // Food and Mana were removed as user-selectable Scale
+            // Sources per request, so there's nothing left for this
+            // command to switch BETWEEN - Mini-Game is the only
+            // selectable source, and Mana now activates automatically
+            // during PvP matches instead (see IsPvpManaModeActive).
+            // Kept as a recognized command rather than silently falling
+            // through to "open settings," so an old macro or muscle
+            // memory gets a clear explanation instead of a confusing
+            // no-op.
+            Log.Information("[MilkMeter] Scale Source is now always Mini-Game - 'mode food' and " +
+                "'mode mana' no longer exist. Mana tracking still happens automatically during PvP " +
+                "matches, with nothing to configure.");
             return;
         }
 
@@ -1677,16 +1686,7 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        if (Configuration.Mode == ScaleMode.Food)
-        {
-            var active = foodTracker.GetFoodBuffState().Active;
-            if (active != lastFoodBuffActive)
-            {
-                forceImmediate = true;
-                lastFoodBuffActive = active;
-            }
-        }
-        else if (Configuration.Mode == ScaleMode.Job && jobTracker.GetTrackingKind() == JobTrackingKind.CombatGrowth)
+        if (Configuration.Mode == ScaleMode.Job && jobTracker.GetTrackingKind() == JobTrackingKind.CombatGrowth)
         {
             var inCombat = Condition[ConditionFlag.InCombat];
 
@@ -2043,23 +2043,21 @@ public sealed class Plugin : IDalamudPlugin
 
         } // end of "if (!Configuration.ScalingPaused)" - see its own comment above
 
-        // Food/Mana mode's own ComputeCurrentScale() path
-        // (FoodScale.Compute/ManaScale.Compute) recomputes fresh from
-        // LIVE game state every single call, entirely independent of
-        // the pause flag above - unlike Job mode, which just reads back
-        // whatever jobCurrentScale currently is (itself already frozen
-        // by the block above, except for direct manual-command writes,
-        // which is exactly what we still want reflected). Left
-        // unguarded, Food/Mana would keep tracking your real Well
-        // Fed/MP the whole time "paused," which isn't a freeze at all -
-        // so while paused AND on Food or Mana specifically, reuse
-        // currentAppliedScale itself as the target (diff against itself
-        // = 0, so the easing step below is a genuine no-op) instead of
-        // calling ComputeCurrentScale() again. Job mode is deliberately
+        // PvP/Mana mode recomputes fresh from LIVE MP every call,
+        // entirely independent of the pause flag above - unlike the
+        // Mini-Game, which just reads back whatever jobCurrentScale
+        // currently is (itself already frozen by the block above, except
+        // for direct manual-command writes, which is exactly what we
+        // still want reflected). Left unguarded, PvP mode would keep
+        // tracking your real MP the whole time "paused," which isn't a
+        // freeze at all - so while paused AND in a PvP match, reuse the
+        // last applied value as the target (diff against itself = 0, so
+        // the easing step below is a genuine no-op) instead of calling
+        // ComputeCurrentScale() again. The Mini-Game is deliberately
         // exempted from this substitution, since ComputeCurrentScale()
         // is exactly how a manual command's direct jobCurrentScale
         // write becomes visible while paused in the first place.
-        var targetScale = Configuration.ScalingPaused && Configuration.Mode != ScaleMode.Job
+        var targetScale = Configuration.ScalingPaused && IsPvpManaModeActive()
             ? GetAppliedScale()
             : ComputeCurrentScale();
 
@@ -2144,19 +2142,32 @@ public sealed class Plugin : IDalamudPlugin
     }
 
     /// <summary>Reads whichever source is active in config and returns the resulting scale.</summary>
+    /// <summary>
+    /// True while the breast scale should be driven by MP rather than
+    /// the Mini-Game, per request: automatically during PvP matches,
+    /// and only then. Uses IClientState.IsPvPExcludingDen rather than
+    /// plain IsPvP deliberately - the plain version also reports true
+    /// while merely standing around in the Wolves' Den (the PvP hub),
+    /// which isn't a match and shouldn't hijack the scale source.
+    /// Verified against dalamud.dev's IClientState reference rather
+    /// than assumed, same as this project's other API-surface checks.
+    ///
+    /// Configuration.Mode no longer factors into this at all - Food and
+    /// Mana were removed as user-selectable Scale Sources per request,
+    /// leaving Mini-Game (ScaleMode.Job) as the only thing a user can
+    /// pick, with this PvP check as the sole remaining way Mana mode
+    /// activates. ScaleMode/FoodScale/ManaScale themselves are all
+    /// deliberately kept rather than deleted: ManaScale is load-bearing
+    /// for exactly this, and the enum still persists in saved configs.
+    /// </summary>
+    private bool IsPvpManaModeActive() => ClientState.IsPvPExcludingDen;
+
     private float ComputeCurrentScale()
     {
-        return Configuration.Mode switch
-        {
-            ScaleMode.Food => FoodScale.Compute(
-                foodTracker.GetFoodBuffState().RemainingSeconds,
-                Configuration.FoodMinScale,
-                Configuration.FoodMaxScale,
-                Configuration.FoodTaperMinutes),
-            ScaleMode.Mana => ManaScale.Compute(manaTracker.GetManaFraction(), Configuration.ManaInverted),
-            ScaleMode.Job => JobScaleFromState(),
-            _ => Configuration.FoodMinScale,
-        };
+        if (IsPvpManaModeActive())
+            return ManaScale.Compute(manaTracker.GetManaFraction(), Configuration.ManaInverted);
+
+        return JobScaleFromState();
     }
 
     private float JobScaleFromState()
