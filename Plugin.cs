@@ -56,6 +56,8 @@ public sealed class Plugin : IDalamudPlugin
     private const string ShortCommandName = "/milk";
     private const string HungerCommandName = "/hungermeter";
     private const string FoodCommandName = "/food";
+    private const string AssCommandName = "/ass";
+    private const string TitsCommandName = "/tits";
 
     public Configuration Configuration { get; }
     private readonly CustomizePlusIpc customizePlus;
@@ -95,6 +97,16 @@ public sealed class Plugin : IDalamudPlugin
     // percentage from it in remaining-time mode without re-polling the
     // status list. Null means no buff active (0%).
     private float? lastKnownWellFedRemainingSeconds;
+
+    // Set by /food (or /ass) with a number while remaining-time mode is
+    // on - overrides the buff-derived waist scale until the buff itself
+    // next changes (appears, expires, or is refreshed by eating again),
+    // at which point it clears and normal tracking resumes. Null means
+    // no override active. Deliberately NOT persisted to config: it's a
+    // deliberately short-lived, in-session thing, and persisting it
+    // would resurrect exactly the cross-character-sharing problem
+    // remaining-time mode otherwise avoids entirely.
+    private float? waistManualOverrideScale;
 
     // Only push an update to Customize+ when the applied scale actually
     // changes by a meaningful amount, and at most several times a second
@@ -450,23 +462,35 @@ public sealed class Plugin : IDalamudPlugin
                 + "Minimum Scaling over time; 'maximum' eases it toward Maximum Scaling (Out of Combat) "
                 + "over time - both read whatever those sliders are currently set to, and work regardless "
                 + "of the currently active Scale Source. 'moan' plays the moan sound and ramps job scale "
-                + "up to Maximum Scaling (In Combat) over 20 seconds. A plain number (e.g. '1.3') sets job "
-                + "scale directly to that value, clamped between Minimum Scaling and Maximum Scaling (In "
-                + "Combat).",
+                + "up to Maximum Scaling (In Combat) over 20 seconds. A plain number (e.g. '150') sets "
+                + "breast scale to that PERCENTAGE, matching what the server info bar reads - 0% is "
+                + "Minimum Scaling, 100% is Maximum Scaling (Out of Combat), 200% is Maximum Scaling "
+                + "(In Combat). '/tits' is an alias for this same command.",
         });
 
         CommandManager.AddHandler(HungerCommandName, new CommandInfo(OnHungerCommand)
         {
             HelpMessage = "'/hungermeter' toggles the Food/Hunger settings window. 'status' prints the "
                 + "current waist scale. 'reset' resets waist scale to Baseline. A plain number (e.g. "
-                + "'0.9') sets waist scale directly to that value, clamped between Minimum and Maximum "
-                + "Waist Scaling. This is a SEPARATE meter "
+                + "'300') sets waist scale to that PERCENTAGE, matching what the server info bar reads - "
+                + "0% is Minimum Waist Scaling, 300% is Maximum. '/food' and '/ass' are aliases for this "
+                + "same command. This is a SEPARATE meter "
                 + "from breast scaling above - see /milkmeter for that one.",
         });
 
         CommandManager.AddHandler(FoodCommandName, new CommandInfo(OnHungerCommand)
         {
             HelpMessage = "Alias for /hungermeter.",
+        });
+
+        CommandManager.AddHandler(AssCommandName, new CommandInfo(OnHungerCommand)
+        {
+            HelpMessage = "Alias for /hungermeter - e.g. '/ass 300' sets waist to 300%.",
+        });
+
+        CommandManager.AddHandler(TitsCommandName, new CommandInfo(OnShortCommand)
+        {
+            HelpMessage = "Alias for /milk - e.g. '/tits 200' sets breast to 200%.",
         });
 
         Framework.Update += OnFrameworkUpdate;
@@ -529,20 +553,35 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        // Mirror of /milk's own plain-number command - '/food 0.8'
-        // sets waist scale directly, clamped between Minimum and
-        // Maximum Waist Scaling (no separate in-combat ceiling here,
-        // unlike the breast-scale version - the waist meter only has
-        // the one Maximum). Cancels nothing else in-progress, since
-        // unlike breast scaling this meter has no moan-ramp equivalent
-        // to worry about interrupting.
-        if (float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var requestedWaistScale))
+        // Percent-based, per request - the number is a 0-300 DTR
+        // percentage, not a raw scale value, so it matches exactly what
+        // the server info bar reads: 0% is Minimum Waist Scaling, 300%
+        // is Maximum, linear between (see WaistScale.PercentToScale).
+        // Out-of-range input saturates at the ends rather than being
+        // rejected.
+        if (float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var requestedWaistPercent))
         {
-            Configuration.CurrentWaistScale = System.Math.Clamp(requestedWaistScale, Configuration.WaistMinScale, Configuration.WaistMaxScale);
+            var newWaistScale = WaistScale.PercentToScale(
+                requestedWaistPercent, Configuration.WaistMinScale, Configuration.WaistMaxScale);
+            Configuration.CurrentWaistScale = newWaistScale;
             Configuration.LastUpdateUnixSeconds = NowUnixSeconds();
             Configuration.Save();
-            Log.Information($"[MilkMeter] Setting waist scale to {Configuration.CurrentWaistScale:F2} (requested {requestedWaistScale:F2}, " +
-                $"clamped between Minimum Waist Scaling {Configuration.WaistMinScale:F2} and Maximum Waist Scaling {Configuration.WaistMaxScale:F2}).");
+
+            // In remaining-time mode, also latch this as an override so
+            // the next tick's recompute doesn't immediately discard it -
+            // it holds until the buff itself next changes. Harmless to
+            // set in accumulator mode too (nothing reads it there), but
+            // scoped to the mode that actually needs it so the field
+            // doesn't linger meaninglessly.
+            if (Configuration.WaistUseRemainingTimeMode)
+                waistManualOverrideScale = newWaistScale;
+
+            var clampedPercent = System.Math.Clamp(requestedWaistPercent, 0f, 300f);
+            Log.Information($"[MilkMeter] Setting waist to {clampedPercent:F0}% (scale {Configuration.CurrentWaistScale:F3}, " +
+                $"requested {requestedWaistPercent:F0}%, clamped to 0-300%)." +
+                (Configuration.WaistUseRemainingTimeMode
+                    ? " Holding this value until Well Fed next changes (appears, expires, or is refreshed by eating)."
+                    : string.Empty));
             return;
         }
 
@@ -554,6 +593,15 @@ public sealed class Plugin : IDalamudPlugin
         Configuration.CurrentWaistScale = Configuration.WaistBaselineScale;
         Configuration.LastUpdateUnixSeconds = NowUnixSeconds();
         Configuration.Save();
+
+        // Clear any manual /food override too - "reset" is an explicit
+        // "put things back to normal" action, so it should hand control
+        // back to buff tracking rather than leaving a stale override
+        // pinning the value. Note this means, in remaining-time mode,
+        // the Baseline value set above only lasts until the very next
+        // tick recomputes from the buff - which is the correct behavior
+        // for a reset in that mode, not a bug.
+        waistManualOverrideScale = null;
     }
 
     private static double NowUnixSeconds() => System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() / 1000.0;
@@ -608,19 +656,27 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var requestedScale))
+        // Percent-based, per request - the number is a 0-200 DTR
+        // percentage, not a raw scale value, so it matches exactly what
+        // the server info bar's Milk half reads: 0% is Minimum Scaling,
+        // 100% is Maximum Scaling (Out of Combat), 200% is Maximum
+        // Scaling (In Combat). ScalePercent.PercentToScale is the exact
+        // inverse of the same two-segment mapping the bar itself uses,
+        // so the two can't drift apart. Out-of-range input saturates at
+        // the ends rather than being rejected. Cancels any in-progress
+        // moan ramp, same as minimum/maximum above.
+        if (float.TryParse(args, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var requestedPercent))
         {
-            // Direct manual set, clamped between Minimum Scaling and
-            // Maximum Scaling (In Combat) - matches 'minimum'/'maximum'
-            // above in being a plain jobCurrentScale write (same
-            // Mode-agnostic caveat applies: only visually apparent while
-            // Job mode is the active Scale Source), but to an arbitrary
-            // caller-specified value instead of one of the two fixed
-            // presets. Cancels any in-progress moan ramp, same
-            // reasoning as minimum/maximum above.
             moanRampActive = false;
-            jobCurrentScale = System.Math.Clamp(requestedScale, Configuration.JobCombatFloorScale, Configuration.JobUpperLimitScale);
-            Log.Information($"[MilkMeter] Setting job scale to {jobCurrentScale:F2} (requested {requestedScale:F2}, clamped between Minimum Scaling {Configuration.JobCombatFloorScale:F2} and Maximum Scaling - In Combat {Configuration.JobUpperLimitScale:F2}).");
+            jobCurrentScale = ScalePercent.PercentToScale(
+                requestedPercent,
+                Configuration.JobCombatFloorScale,
+                Configuration.JobBaselineScale,
+                Configuration.JobUpperLimitScale);
+
+            var clampedMilkPercent = System.Math.Clamp(requestedPercent, 0f, 200f);
+            Log.Information($"[MilkMeter] Setting breast to {clampedMilkPercent:F0}% (scale {jobCurrentScale:F3}, " +
+                $"requested {requestedPercent:F0}%, clamped to 0-200%).");
             return;
         }
 
@@ -925,6 +981,38 @@ public sealed class Plugin : IDalamudPlugin
         if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
             lastKnownWellFedRemainingSeconds = remainingSecondsForBump;
 
+        // Manual-override lifetime, per request: a /food (or /ass)
+        // percentage set while remaining-time mode is on sticks until
+        // the BUFF ITSELF next changes, rather than being overwritten
+        // by the very next tick's recompute. "Changes" deliberately
+        // means a discrete event - the buff appearing, expiring, or
+        // being refreshed/extended by eating again - NOT the ordinary
+        // second-by-second countdown, which would otherwise clear the
+        // override instantly and defeat the whole point. Computed here,
+        // before lastFoodBuffActiveForBump is updated further below, so
+        // both edges are still available to compare against.
+        var wellFedJustAppeared = isWellFedActive && !lastFoodBuffActiveForBump;
+        var wellFedJustEnded = !isWellFedActive && lastFoodBuffActiveForBump;
+        var wellFedJustRefreshed = isWellFedActive && lastFoodBuffActiveForBump
+            && remainingSecondsForBump is { } rNow && lastRemainingSecondsForBump is { } rPrev && rNow > rPrev + 1f;
+
+        if (waistManualOverrideScale is not null && (wellFedJustAppeared || wellFedJustEnded || wellFedJustRefreshed))
+        {
+            waistManualOverrideScale = null;
+            Log.Information("[MilkMeter] Well Fed changed - clearing manual waist override, resuming buff tracking.");
+        }
+
+        // Updated unconditionally, AFTER the three edge comparisons
+        // above have consumed the previous frame's values - deliberately
+        // outside the accumulator-mode branch further below, since
+        // remaining-time mode needs these edges too now (for the
+        // override-clearing check just above). Leaving them inside that
+        // branch, as they originally were, would have left them
+        // permanently stale in remaining-time mode and silently broken
+        // the override lifetime.
+        lastFoodBuffActiveForBump = isWellFedActive;
+        lastRemainingSecondsForBump = remainingSecondsForBump;
+
         // Remaining-time mode, per request - an entirely separate model
         // from the accumulator below, so it short-circuits past ALL of
         // it (growth/decay rates, constant decrease, food-eaten bump,
@@ -941,10 +1029,15 @@ public sealed class Plugin : IDalamudPlugin
         {
             if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
             {
-                Configuration.CurrentWaistScale = WaistScale.ComputeFromRemainingTime(
-                    remainingSecondsForBump,
-                    Configuration.WaistMinScale,
-                    Configuration.WaistMaxScale);
+                // A manual /food (or /ass) percentage takes precedence
+                // over the buff-derived value for as long as it's
+                // active - see the override-clearing block above for
+                // exactly when it stops applying.
+                Configuration.CurrentWaistScale = waistManualOverrideScale
+                    ?? WaistScale.ComputeFromRemainingTime(
+                        remainingSecondsForBump,
+                        Configuration.WaistMinScale,
+                        Configuration.WaistMaxScale);
             }
         }
         else
@@ -965,8 +1058,6 @@ public sealed class Plugin : IDalamudPlugin
         var foodConsumedEdge = (isWellFedActive && !lastFoodBuffActiveForBump)
             || (isWellFedActive && lastFoodBuffActiveForBump
                 && remainingSecondsForBump is { } r && lastRemainingSecondsForBump is { } lastR && r > lastR + 1f);
-        lastFoodBuffActiveForBump = isWellFedActive;
-        lastRemainingSecondsForBump = remainingSecondsForBump;
 
         if (Configuration.WaistFoodEatenBumpEnabled && foodConsumedEdge)
         {
@@ -2231,6 +2322,8 @@ public sealed class Plugin : IDalamudPlugin
         CommandManager.RemoveHandler(ShortCommandName);
         CommandManager.RemoveHandler(HungerCommandName);
         CommandManager.RemoveHandler(FoodCommandName);
+        CommandManager.RemoveHandler(AssCommandName);
+        CommandManager.RemoveHandler(TitsCommandName);
         dtrBarEntry.Remove();
         customizePlus.RevertScales();
         customizePlus.Dispose();

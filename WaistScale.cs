@@ -159,11 +159,46 @@ public static class WaistScale
     /// still uses - that one maps a scale VALUE onto 0-200%, whereas
     /// this maps remaining TIME onto 0-300%.
     /// </summary>
+    /// <summary>
+    /// The DTR (server info bar) percentage for remaining-time mode,
+    /// per request: 0% with no buff, 100% at 30 minutes left, 200% at
+    /// 60, 300% at 90 - a straight linear 30-minutes-per-100% mapping,
+    /// entirely independent of the Min/Baseline/Max SCALE sliders (so
+    /// changing those changes how big you get, but not what the bar
+    /// reads). Deliberately separate from
+    /// ScalePercent.ComputeTwoSegmentPercent, which the accumulator mode
+    /// still uses - that one maps a scale VALUE onto 0-200%, whereas
+    /// this maps remaining TIME onto 0-300%.
+    /// </summary>
     public static float ComputeRemainingTimePercent(float? remainingSeconds)
     {
         if (remainingSeconds is not { } seconds || seconds <= 0f)
             return 0f;
 
         return (seconds / 60f) / 30f * 100f;
+    }
+
+    /// <summary>
+    /// Exact inverse of ComputeRemainingTimePercent's relationship to
+    /// scale - converts a 0-300 DTR percentage into the actual waist
+    /// scale value that percentage corresponds to, for the
+    /// "/food &lt;number&gt;" and "/ass &lt;number&gt;" commands. 0% is
+    /// minScale, 300% is maxScale, linear between (so 100% lands
+    /// exactly a third of the way up the Min..Max range, matching what
+    /// the DTR bar shows at 30 minutes remaining). Clamped to 0-300, so
+    /// out-of-range input saturates at the ends rather than
+    /// extrapolating past Min/Max.
+    ///
+    /// Deliberately NOT hinged on WaistBaselineScale: the remaining-time
+    /// model this mirrors is a single straight line from Min to Max,
+    /// with Baseline playing no part in it (see
+    /// ComputeFromRemainingTime's own doc comment), so treating
+    /// Baseline as a 100% anchor here would make the command disagree
+    /// with the bar it's meant to match.
+    /// </summary>
+    public static float PercentToScale(float percent, float minScale, float maxScale)
+    {
+        var clamped = System.Math.Clamp(percent, 0f, 300f);
+        return Clamp(minScale + (maxScale - minScale) * (clamped / 300f), minScale, maxScale);
     }
 }
