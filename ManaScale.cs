@@ -22,20 +22,29 @@ public sealed class ManaTracker(IObjectTable objectTable)
 
 public static class ManaScale
 {
-    public const float MinScale = 0.60f;
-    public const float MaxScale = 1.00f;
+    // Defaults for Configuration.PvpManaMinScale/PvpManaMaxScale, which
+    // replaced these as hardcoded values once PvP mode got its own
+    // configurable range per request. Kept here (rather than inlined
+    // into Configuration) so the original ManaMune-derived numbers stay
+    // documented alongside the math that uses them.
+    public const float DefaultMinScale = 0.60f;
+    public const float DefaultMaxScale = 1.00f;
 
     /// <summary>
     /// Full size at 100% MP, minimum size at 0% MP - or reversed, per
     /// config, matching the original plugin's description ("Full at 100%,
-    /// smaller as you spend - or the other way round").
+    /// smaller as you spend - or the other way round"). minScale/maxScale
+    /// are now passed in rather than being the hardcoded constants above,
+    /// so PvP mode has its own range independent of the Mini-Game's
+    /// Minimum/Maximum Scaling sliders - the two are driven by entirely
+    /// different signals and there's no reason they should share bounds.
     /// </summary>
-    public static float Compute(float? manaFraction, bool inverted)
+    public static float Compute(float? manaFraction, bool inverted, float minScale, float maxScale)
     {
         if (manaFraction is null)
-            return MinScale;
+            return minScale;
 
         var fraction = inverted ? 1f - manaFraction.Value : manaFraction.Value;
-        return MinScale + (MaxScale - MinScale) * fraction;
+        return minScale + (maxScale - minScale) * fraction;
     }
 }

@@ -108,6 +108,16 @@ public sealed class Plugin : IDalamudPlugin
     // remaining-time mode otherwise avoids entirely.
     private float? waistManualOverrideScale;
 
+    // Temporary Food % granted by the Milk-to-Food transfer (see the
+    // dazedDrainActive block), held in PERCENTAGE POINTS and decayed
+    // toward 0 at Configuration.WaistTransferBonusDecayPerMinute. Kept
+    // separate from Configuration.CurrentWaistScale rather than merged
+    // into it, since it has to survive remaining-time mode recomputing
+    // that base value from scratch every tick - and since a merged
+    // value couldn't be told apart from the base for decay purposes.
+    // Not persisted: it's explicitly a temporary, in-session thing.
+    private float waistTransferBonusPercent;
+
     // Only push an update to Customize+ when the applied scale actually
     // changes by a meaningful amount, and at most several times a second
     // - IPC calls are not free, and Customize+ has to reapply the whole
@@ -1029,6 +1039,22 @@ public sealed class Plugin : IDalamudPlugin
         lastFoodBuffActiveForBump = isWellFedActive;
         lastRemainingSecondsForBump = remainingSecondsForBump;
 
+        // Decay the temporary Milk-to-Food transfer bonus toward 0, per
+        // request - a passive reduction analogous to the Mini-Game's own
+        // "Out of Combat Scale Gen (Per Minute)", so transferred Food %
+        // fades away rather than sticking permanently. Expressed in
+        // PERCENTAGE POINTS per minute (the unit the bonus itself is
+        // held in), divided by 60 here since elapsedWaistSeconds is in
+        // seconds. Gated on pause/death-freeze like every other
+        // automatic waist mechanic, so a paused meter's bonus holds
+        // rather than quietly draining away while frozen.
+        if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive
+            && waistTransferBonusPercent > 0f && elapsedWaistSeconds > 0d)
+        {
+            var decay = (float)(Configuration.WaistTransferBonusDecayPerMinute / 60.0 * elapsedWaistSeconds);
+            waistTransferBonusPercent = System.Math.Max(0f, waistTransferBonusPercent - decay);
+        }
+
         // Remaining-time mode, per request - an entirely separate model
         // from the accumulator below, so it short-circuits past ALL of
         // it (growth/decay rates, constant decrease, food-eaten bump,
@@ -1330,7 +1356,7 @@ public sealed class Plugin : IDalamudPlugin
         // applies, so it animates back to 1.0 rather than snapping.
         {
             var pvpActive = IsPvpManaModeActive();
-            if (!pvpActive && lastWasPvpManaMode)
+            if (!pvpActive && lastWasPvpManaMode && Configuration.ResetScaleOnPvpExit)
             {
                 jobCurrentScale = Configuration.JobBaselineScale;
                 moanRampActive = false;
@@ -1915,14 +1941,26 @@ public sealed class Plugin : IDalamudPlugin
                             jobCurrentScale, Configuration.JobCombatFloorScale, Configuration.JobBaselineScale, Configuration.JobUpperLimitScale);
                         var percentPointsLost = milkPercentBefore - milkPercentAfter;
 
+                        // Accumulated into a separate, temporary BONUS
+                        // rather than written straight into
+                        // Configuration.CurrentWaistScale, per request.
+                        // Two reasons this had to change: (1) the direct
+                        // write was silently dead in remaining-time
+                        // mode, since that mode recomputes waist scale
+                        // from the buff every tick and would overwrite
+                        // it immediately; (2) the transferred amount is
+                        // meant to be temporary, decaying away over time
+                        // at WaistTransferBonusDecayPerMinute, which a
+                        // value merged into the base scale couldn't be
+                        // distinguished for. Kept in PERCENTAGE POINTS
+                        // (the unit the transfer is specified in -
+                        // "Milk % reduced is gained as Food %") and
+                        // converted to scale units only at the point of
+                        // application, so both modes can apply it the
+                        // same way despite their bases being computed
+                        // completely differently.
                         if (percentPointsLost > 0f)
-                        {
-                            var currentFoodPercent = ScalePercent.ComputeTwoSegmentPercent(
-                                Configuration.CurrentWaistScale, Configuration.WaistMinScale, Configuration.WaistBaselineScale, Configuration.WaistMaxScale);
-                            var newFoodPercent = System.Math.Clamp(currentFoodPercent + percentPointsLost, 0f, 200f);
-                            Configuration.CurrentWaistScale = ScalePercent.PercentToScale(
-                                newFoodPercent, Configuration.WaistMinScale, Configuration.WaistBaselineScale, Configuration.WaistMaxScale);
-                        }
+                            waistTransferBonusPercent = System.Math.Clamp(waistTransferBonusPercent + percentPointsLost, 0f, 300f);
                     }
 
                     // Repeating milk burst (bottle-local only now) while
@@ -2126,10 +2164,35 @@ public sealed class Plugin : IDalamudPlugin
             currentAppliedWaistScale = 1f;
 
         var waistMaxStep = Configuration.WaistScaleTransitionRate * deltaSeconds;
-        var waistDiff = Configuration.CurrentWaistScale - currentAppliedWaistScale;
+
+        // The temporary Milk-to-Food transfer bonus is applied HERE, as
+        // a derived layer on top of the base target, rather than being
+        // written into Configuration.CurrentWaistScale itself. That
+        // distinction is load-bearing: in accumulator mode
+        // CurrentWaistScale is a RUNNING TOTAL that persists frame to
+        // frame, so folding the bonus into it would re-add the same
+        // bonus every single frame and compound it straight to Maximum
+        // within seconds. Keeping the base clean and adding the bonus
+        // only at the point of use means both modes behave identically
+        // and neither compounds.
+        //
+        // Converted from percentage points to scale units using the same
+        // linear 0-300 mapping WaistScale.PercentToScale and the DTR bar
+        // both use, so "100 percentage points of bonus" means the same
+        // visible amount however it got there. Clamped to WaistMaxScale,
+        // so the bonus can lift you toward Maximum but never past it.
+        var waistBonusScaleUnits = waistTransferBonusPercent > 0f
+            ? (waistTransferBonusPercent / 300f) * (Configuration.WaistMaxScale - Configuration.WaistMinScale)
+            : 0f;
+        var waistTarget = WaistScale.Clamp(
+            Configuration.CurrentWaistScale + waistBonusScaleUnits,
+            Configuration.WaistMinScale,
+            Configuration.WaistMaxScale);
+
+        var waistDiff = waistTarget - currentAppliedWaistScale;
 
         currentAppliedWaistScale = waistMaxStep <= 0f || System.Math.Abs(waistDiff) <= waistMaxStep
-            ? Configuration.CurrentWaistScale
+            ? waistTarget
             : currentAppliedWaistScale + System.Math.Sign(waistDiff) * waistMaxStep;
 
         // Placed here specifically - after currentAppliedScale is
@@ -2199,7 +2262,11 @@ public sealed class Plugin : IDalamudPlugin
     private float ComputeCurrentScale()
     {
         if (IsPvpManaModeActive())
-            return ManaScale.Compute(manaTracker.GetManaFraction(), Configuration.ManaInverted);
+            return ManaScale.Compute(
+                manaTracker.GetManaFraction(),
+                Configuration.ManaInverted,
+                Configuration.PvpManaMinScale,
+                Configuration.PvpManaMaxScale);
 
         return JobScaleFromState();
     }
@@ -2270,12 +2337,14 @@ public sealed class Plugin : IDalamudPlugin
         // time" to map, so it falls back to the scale-value-based
         // two-segment 0-200% mapping that mode has always used.
         var foodPercent = Configuration.WaistUseRemainingTimeMode
-            ? (int)System.Math.Round(WaistScale.ComputeRemainingTimePercent(lastKnownWellFedRemainingSeconds))
-            : (int)System.Math.Round(ScalePercent.ComputeTwoSegmentPercent(
-                Configuration.CurrentWaistScale,
-                Configuration.WaistMinScale,
-                Configuration.WaistBaselineScale,
-                Configuration.WaistMaxScale));
+            ? (int)System.Math.Round(System.Math.Clamp(
+                WaistScale.ComputeRemainingTimePercent(lastKnownWellFedRemainingSeconds) + waistTransferBonusPercent, 0f, 300f))
+            : (int)System.Math.Round(System.Math.Clamp(
+                ScalePercent.ComputeTwoSegmentPercent(
+                    Configuration.CurrentWaistScale,
+                    Configuration.WaistMinScale,
+                    Configuration.WaistBaselineScale,
+                    Configuration.WaistMaxScale) + waistTransferBonusPercent, 0f, 300f));
 
         if (milkPercent == lastDtrBarPercent && foodPercent == lastDtrBarWaistPercent)
             return;

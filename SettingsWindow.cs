@@ -64,34 +64,53 @@ public sealed class SettingsWindow(
         ImGui.Text("Scale Source");
 
         var pvpActive = getIsPvpManaActive();
-        if (pvpActive)
-        {
-            ImGui.Text("Currently: Mana (PvP match detected)");
-            ImGui.TextDisabled("Breast scale automatically switches to tracking your MP during PvP " +
-                "matches, then returns to the Mini-Game when the match ends. The Wolves' Den hub " +
-                "doesn't count - only actual matches.");
+        ImGui.Text(pvpActive ? "Currently: Mana (PvP match detected)" : "Currently: Mini-Game");
+        ImGui.TextDisabled("The Mini-Game is the only selectable source. During PvP matches it " +
+            "automatically switches to tracking your MP instead, then switches back when the match " +
+            "ends. The Wolves' Den hub doesn't count - only actual matches.");
 
-            var inverted = configuration.ManaInverted;
-            if (ImGui.Checkbox("Invert (Smaller at Full MP)", ref inverted))
-            {
-                configuration.ManaInverted = inverted;
-                configuration.Save();
-            }
-        }
-        else
-        {
-            ImGui.Text("Currently: Mini-Game");
-            ImGui.TextDisabled("The Mini-Game is the only selectable source. During PvP matches it " +
-                "automatically switches to tracking your MP instead, then switches back when the match " +
-                "ends - nothing to configure for that.");
+        ImGui.Separator();
+        ImGui.Text("PvP (Mana) Scaling");
 
-            var inverted = configuration.ManaInverted;
-            if (ImGui.Checkbox("Invert PvP Mana (Smaller at Full MP)", ref inverted))
-            {
-                configuration.ManaInverted = inverted;
-                configuration.Save();
-            }
+        var pvpMinScale = configuration.PvpManaMinScale;
+        if (ImGui.SliderFloat("PvP Minimum Scaling", ref pvpMinScale, 0.10f, 2.00f, "%.2f"))
+        {
+            if (pvpMinScale > configuration.PvpManaMaxScale)
+                pvpMinScale = configuration.PvpManaMaxScale;
+            configuration.PvpManaMinScale = pvpMinScale;
+            configuration.Save();
         }
+
+        var pvpMaxScale = configuration.PvpManaMaxScale;
+        if (ImGui.SliderFloat("PvP Maximum Scaling", ref pvpMaxScale, 0.10f, 3.00f, "%.2f"))
+        {
+            if (pvpMaxScale < configuration.PvpManaMinScale)
+                pvpMaxScale = configuration.PvpManaMinScale;
+            configuration.PvpManaMaxScale = pvpMaxScale;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("The range MP maps onto during PvP matches - entirely separate from the " +
+            "Mini-Game's own Minimum/Maximum Scaling further below, since the two are driven by " +
+            "completely different signals. Minimum is 0% MP, Maximum is 100% MP (or reversed, if " +
+            "Invert below is checked).");
+
+        var inverted = configuration.ManaInverted;
+        if (ImGui.Checkbox("Invert (Smaller at Full MP)", ref inverted))
+        {
+            configuration.ManaInverted = inverted;
+            configuration.Save();
+        }
+
+        var resetOnPvpExit = configuration.ResetScaleOnPvpExit;
+        if (ImGui.Checkbox("Return to 1.0 Scaling When Exiting PvP", ref resetOnPvpExit))
+        {
+            configuration.ResetScaleOnPvpExit = resetOnPvpExit;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("When ON, leaving a PvP match resets breast scale to Maximum Scaling (Out of " +
+            "Combat) - the value the server info bar reads as 100%. When OFF, it returns to whatever " +
+            "the Mini-Game was parked at before the match started, which may be a stale value from " +
+            "however long ago that was. On by default.");
 
         {
             ImGui.Separator();
@@ -370,8 +389,11 @@ public sealed class SettingsWindow(
                 "window's server info bar percentage) are added onto Food (the separate waist/hunger " +
                 "meter's own percentage, in its own /hungermeter or /food window) instead of simply " +
                 "disappearing - e.g. at default values, draining Milk from 200% to 100% (Dazed Drain " +
-                "Floor's default IS Milk's own 100% mark) adds exactly 100 percentage points to Food. No " +
-                "transfer happens while the Food meter's own Scaling Paused is checked.");
+                "Floor's default IS Milk's own 100% mark) adds exactly 100 percentage points to Food. " +
+                "This transferred Food % is TEMPORARY - it stacks on top of whatever the Food meter " +
+                "normally computes and then fades away, at a rate set by \"Transferred Milk % Decay " +
+                "(Per Minute)\" in the /food window. No transfer happens while the Food meter's own " +
+                "Scaling Paused is checked.");
 
             var waterDrainEnabled = configuration.WaterDrainBoostEnabled;
             if (ImGui.Checkbox("Breast Feeding Drain (/water)", ref waterDrainEnabled))
@@ -572,7 +594,9 @@ public sealed class SettingsWindow(
             configuration.Save();
         }
 
-        var (currentMin, currentMax) = (configuration.JobCombatFloorScale, configuration.JobUpperLimitScale);
+        var (currentMin, currentMax) = getIsPvpManaActive()
+            ? (configuration.PvpManaMinScale, configuration.PvpManaMaxScale)
+            : (configuration.JobCombatFloorScale, configuration.JobUpperLimitScale);
         var range = System.MathF.Abs(currentMax - currentMin);
         var transitionSeconds = transitionRate > 0f ? range / transitionRate : 0f;
         ImGui.TextDisabled($"At this speed, going from min to max takes about {transitionSeconds:F1}s.");

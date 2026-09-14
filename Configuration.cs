@@ -76,9 +76,36 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// Original ManaMune behavior: if true, chest shrinks as MP is spent
     /// (full at 100% MP). If false, inverted - shrinks as MP is restored.
-    /// Only relevant when Mode == ScaleMode.Mana.
+    /// Only relevant during PvP matches, the one remaining situation
+    /// where MP drives the scale (see Plugin.IsPvpManaModeActive).
     /// </summary>
     public bool ManaInverted { get; set; } = false;
+
+    /// <summary>
+    /// Scale at 0% MP during PvP (or at 100% MP if ManaInverted is on) -
+    /// PvP mode's own Minimum, restored as a configurable slider per
+    /// request. Deliberately SEPARATE from JobCombatFloorScale: the
+    /// Mini-Game and PvP mode are driven by entirely different signals,
+    /// so there's no reason they should share bounds. Defaults to the
+    /// value this was hardcoded to before it became configurable, so
+    /// existing behavior doesn't change for anyone who never touches it.
+    /// </summary>
+    public float PvpManaMinScale { get; set; } = ManaScale.DefaultMinScale;
+
+    /// <summary>Scale at 100% MP during PvP (or at 0% MP if ManaInverted is on) - PvP mode's own Maximum. Same separate-from-the-Mini-Game reasoning as PvpManaMinScale above.</summary>
+    public float PvpManaMaxScale { get; set; } = ManaScale.DefaultMaxScale;
+
+    /// <summary>
+    /// If true, leaving a PvP match resets breast scale back to
+    /// JobBaselineScale (the value the DTR bar's Milk half reads as
+    /// 100%) - see the PvP-exit block in Plugin.OnFrameworkUpdate.
+    /// Made toggleable per request; was previously unconditional. When
+    /// off, leaving a match simply returns to whatever the Mini-Game was
+    /// parked at before it started, which may be a stale value from
+    /// however long ago that was. On by default, matching the behavior
+    /// this replaced.
+    /// </summary>
+    public bool ResetScaleOnPvpExit { get; set; } = true;
 
     /// <summary>Chest scale with no food buff active.</summary>
     public float FoodMinScale { get; set; } = FoodScale.DefaultMinScale;
@@ -358,6 +385,24 @@ public sealed class Configuration : IPluginConfiguration
     /// CurrentWaistScale. On by default.
     /// </summary>
     public bool DazedTransferToFoodEnabled { get; set; } = true;
+
+    /// <summary>
+    /// How fast the temporary Milk-to-Food transfer bonus fades away,
+    /// in PERCENTAGE POINTS per minute - the Food-side counterpart to
+    /// the Mini-Game's "Out of Combat Scale Gen (Per Minute)", per
+    /// request. The transferred Food % is explicitly temporary: it
+    /// stacks on top of whatever the normal model (remaining-time or
+    /// accumulator) computed, then drains back to nothing at this rate.
+    /// Expressed in percentage points rather than raw scale units
+    /// because that's the unit the transfer itself is specified in
+    /// ("Milk % reduced is gained as Food %") - and because the two
+    /// meters' scale ranges differ, so a shared scale-unit rate would
+    /// mean different things on each. 20 by default: draining Milk from
+    /// 200% to 100% grants 100 points, which fades over about 5 minutes.
+    /// A rate of 0 means the bonus never decays at all (permanent until
+    /// something else clears it).
+    /// </summary>
+    public float WaistTransferBonusDecayPerMinute { get; set; } = 20f;
 
     /// <summary>The ModeParam value that identifies /dazed specifically. Confirmed as 79 via /milkmeter emotedebug - see ShakeDrinkEmoteModeParam for the full story on how this kind of value gets found rather than guessed.</summary>
     public int DazedEmoteModeParam { get; set; } = 79;

@@ -87,6 +87,18 @@ public sealed class HungerSettingsWindow(
             "0.4 range (0.8-1.2) takes about 8 seconds. Set to 0 for instant snapping. Independent of " +
             "the breast gauge's own transition rate in the main window.");
 
+        var transferDecay = configuration.WaistTransferBonusDecayPerMinute;
+        if (ImGui.SliderFloat("Transferred Milk % Decay (Per Minute)", ref transferDecay, 0.0f, 100.0f, "%.1f"))
+        {
+            configuration.WaistTransferBonusDecayPerMinute = transferDecay;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("Food % granted by \"Transfer Drained Milk % to Food %\" (in the main Milk " +
+            "window) is TEMPORARY - it stacks on top of whatever the normal model computes, then fades " +
+            "away at this many percentage points per minute. E.g. draining Milk from 200% to 100% " +
+            "grants 100 points, which fades over about 5 minutes at the default 20. Set to 0 to make " +
+            "transferred Food % permanent instead. Works in both scaling models.");
+
         var useRemainingTime = configuration.WaistUseRemainingTimeMode;
         if (ImGui.Checkbox("Scale From Remaining Well Fed Time", ref useRemainingTime))
         {
