@@ -201,4 +201,23 @@ public static class WaistScale
         var clamped = System.Math.Clamp(percent, 0f, 300f);
         return Clamp(minScale + (maxScale - minScale) * (clamped / 300f), minScale, maxScale);
     }
+
+    /// <summary>
+    /// Inverse of PercentToScale - converts an actual waist scale value
+    /// back into its 0-300 DTR percentage. Needed because several
+    /// sources of the current waist scale are known only as a SCALE (a
+    /// manual /food override, a PvP mana reading, a PvP death custom
+    /// scale) rather than as a remaining-buff-time the bar could derive
+    /// a percentage from directly - without this, the bar keeps
+    /// reporting the buff-derived percentage while the body shows
+    /// something else entirely.
+    /// </summary>
+    public static float ScaleToPercent(float scale, float minScale, float maxScale)
+    {
+        var span = maxScale - minScale;
+        if (span <= 0f)
+            return 0f;
+
+        return System.Math.Clamp((scale - minScale) / span * 300f, 0f, 300f);
+    }
 }

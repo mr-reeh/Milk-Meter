@@ -232,6 +232,75 @@ public sealed class HungerSettingsWindow(
         } // end of accumulator-mode-only Rates section
 
         ImGui.Separator();
+        ImGui.Text("PvP (Mana) Scaling");
+
+        var waistPvpEnabled = configuration.WaistPvpManaEnabled;
+        if (ImGui.Checkbox("Track Mana During PvP", ref waistPvpEnabled))
+        {
+            configuration.WaistPvpManaEnabled = waistPvpEnabled;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("When ON, waist scale tracks your MP during PvP matches exactly as breast " +
+            "scale does, overriding whichever scaling model is selected above for the duration of the " +
+            "match. The Wolves' Den hub doesn't count - only actual matches. On by default.");
+
+        var pvpWaistMin = configuration.PvpWaistManaMinScale;
+        if (ImGui.SliderFloat("PvP Minimum Waist Scaling", ref pvpWaistMin, 0.10f, 2.00f, "%.2f"))
+        {
+            if (pvpWaistMin > configuration.PvpWaistManaMaxScale)
+                pvpWaistMin = configuration.PvpWaistManaMaxScale;
+            configuration.PvpWaistManaMinScale = pvpWaistMin;
+            configuration.Save();
+        }
+
+        var pvpWaistMax = configuration.PvpWaistManaMaxScale;
+        if (ImGui.SliderFloat("PvP Maximum Waist Scaling", ref pvpWaistMax, 0.10f, 3.00f, "%.2f"))
+        {
+            if (pvpWaistMax < configuration.PvpWaistManaMinScale)
+                pvpWaistMax = configuration.PvpWaistManaMinScale;
+            configuration.PvpWaistManaMaxScale = pvpWaistMax;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("The range MP maps onto during PvP - separate from both this window's own " +
+            "Minimum/Maximum above AND the breast gauge's own PvP range, so all three are tunable " +
+            "independently. Minimum is 0% MP, Maximum is 100% MP (or reversed, if Invert below).");
+
+        var waistInverted = configuration.WaistManaInverted;
+        if (ImGui.Checkbox("Invert Waist (Smaller at Full MP)", ref waistInverted))
+        {
+            configuration.WaistManaInverted = waistInverted;
+            configuration.Save();
+        }
+
+        var resetWaistOnPvpExit = configuration.ResetWaistScaleOnPvpExit;
+        if (ImGui.Checkbox("Return to Baseline When Exiting PvP", ref resetWaistOnPvpExit))
+        {
+            configuration.ResetWaistScaleOnPvpExit = resetWaistOnPvpExit;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("When ON, leaving a PvP match resets waist scale to Baseline. Note this only " +
+            "sticks in the accumulator model - with \"Scale From Remaining Well Fed Time\" on, the very " +
+            "next tick recomputes from your actual buff anyway, which is the correct behavior there " +
+            "rather than a bug.");
+
+        var pvpWaistDeathCustom = configuration.PvpWaistDeathCustomScaleEnabled;
+        if (ImGui.Checkbox("On Death, Set Custom Waist Scale (PvP)", ref pvpWaistDeathCustom))
+        {
+            configuration.PvpWaistDeathCustomScaleEnabled = pvpWaistDeathCustom;
+            configuration.Save();
+        }
+
+        var pvpWaistDeathScale = configuration.PvpWaistDeathCustomScale;
+        if (ImGui.SliderFloat("PvP Death Waist Scale", ref pvpWaistDeathScale, 0.10f, 3.00f, "%.2f"))
+        {
+            configuration.PvpWaistDeathCustomScale = pvpWaistDeathScale;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("While dead during a PvP match, forces waist scale to this exact value and " +
+            "holds it there regardless of your MP, until you're revived. Separate from the death " +
+            "toggles at the top of this window, which don't apply during PvP. Off by default.");
+
+        ImGui.Separator();
         ImGui.Text("Status");
 
         var current = getCurrentWaistScale();

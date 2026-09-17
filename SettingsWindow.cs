@@ -112,6 +112,23 @@ public sealed class SettingsWindow(
             "the Mini-Game was parked at before the match started, which may be a stale value from " +
             "however long ago that was. On by default.");
 
+        var pvpDeathCustom = configuration.PvpDeathCustomScaleEnabled;
+        if (ImGui.Checkbox("On Death, Set Custom Scale (PvP)", ref pvpDeathCustom))
+        {
+            configuration.PvpDeathCustomScaleEnabled = pvpDeathCustom;
+            configuration.Save();
+        }
+
+        var pvpDeathScale = configuration.PvpDeathCustomScale;
+        if (ImGui.SliderFloat("PvP Death Scale", ref pvpDeathScale, 0.10f, 3.00f, "%.2f"))
+        {
+            configuration.PvpDeathCustomScale = pvpDeathScale;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("While dead during a PvP match, forces breast scale to this exact value and " +
+            "holds it there regardless of your MP, until you're revived. Separate from the Mini-Game's " +
+            "own death-reset toggles further below, which don't apply during PvP. Off by default.");
+
         {
             ImGui.Separator();
             ImGui.Text("Mini-Game Scaling");

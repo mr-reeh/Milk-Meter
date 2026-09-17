@@ -58,6 +58,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string FoodCommandName = "/food";
     private const string AssCommandName = "/ass";
     private const string TitsCommandName = "/tits";
+    private const string BoobsCommandName = "/boobs";
 
     public Configuration Configuration { get; }
     private readonly CustomizePlusIpc customizePlus;
@@ -522,6 +523,11 @@ public sealed class Plugin : IDalamudPlugin
         CommandManager.AddHandler(TitsCommandName, new CommandInfo(OnShortCommand)
         {
             HelpMessage = "Alias for /milk - e.g. '/tits 200' sets breast to 200%.",
+        });
+
+        CommandManager.AddHandler(BoobsCommandName, new CommandInfo(OnShortCommand)
+        {
+            HelpMessage = "Alias for /milk - e.g. '/boobs 0' sets breast to 0%.",
         });
 
         Framework.Update += OnFrameworkUpdate;
@@ -1067,7 +1073,31 @@ public sealed class Plugin : IDalamudPlugin
         // paused. See WaistScale.ComputeFromRemainingTime and
         // Configuration.WaistUseRemainingTimeMode for the full reasoning,
         // including why this mode needs no persistence at all.
-        if (Configuration.WaistUseRemainingTimeMode)
+        //
+        // Waist PvP mana mode, per request, takes precedence over BOTH
+        // normal models for the duration of a match - exactly as the
+        // breast side's own PvP branch does. Checked first so neither
+        // model runs at all while it's active, rather than running and
+        // then being overwritten. Its death custom scale is checked
+        // live here for the same reason the breast side's is: this
+        // recomputes from MP every frame, so a one-shot write on the
+        // death edge would be overwritten immediately.
+        var waistPvpActive = Configuration.WaistPvpManaEnabled && IsPvpManaModeActive();
+        if (waistPvpActive)
+        {
+            if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
+            {
+                Configuration.CurrentWaistScale =
+                    Configuration.PvpWaistDeathCustomScaleEnabled && Condition[ConditionFlag.Unconscious]
+                        ? Configuration.PvpWaistDeathCustomScale
+                        : ManaScale.Compute(
+                            manaTracker.GetManaFraction(),
+                            Configuration.WaistManaInverted,
+                            Configuration.PvpWaistManaMinScale,
+                            Configuration.PvpWaistManaMaxScale);
+            }
+        }
+        else if (Configuration.WaistUseRemainingTimeMode)
         {
             if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
             {
@@ -1356,12 +1386,27 @@ public sealed class Plugin : IDalamudPlugin
         // applies, so it animates back to 1.0 rather than snapping.
         {
             var pvpActive = IsPvpManaModeActive();
-            if (!pvpActive && lastWasPvpManaMode && Configuration.ResetScaleOnPvpExit)
+            if (!pvpActive && lastWasPvpManaMode)
             {
-                jobCurrentScale = Configuration.JobBaselineScale;
-                moanRampActive = false;
-                forceImmediate = true;
-                Log.Information($"[MilkMeter] Left PvP - breast scale reset to 100% ({Configuration.JobBaselineScale:F2}).");
+                if (Configuration.ResetScaleOnPvpExit)
+                {
+                    jobCurrentScale = Configuration.JobBaselineScale;
+                    moanRampActive = false;
+                    forceImmediate = true;
+                    Log.Information($"[MilkMeter] Left PvP - breast scale reset to 100% ({Configuration.JobBaselineScale:F2}).");
+                }
+
+                // Waist counterpart, per request. Only meaningfully
+                // persists in accumulator mode - in remaining-time mode
+                // the next tick recomputes from the buff regardless,
+                // which is correct there (the buff is the source of
+                // truth) rather than a bug.
+                if (Configuration.WaistPvpManaEnabled && Configuration.ResetWaistScaleOnPvpExit)
+                {
+                    Configuration.CurrentWaistScale = Configuration.WaistBaselineScale;
+                    waistManualOverrideScale = null;
+                    Log.Information($"[MilkMeter] Left PvP - waist scale reset to Baseline ({Configuration.WaistBaselineScale:F2}).");
+                }
             }
             lastWasPvpManaMode = pvpActive;
         }
@@ -2262,11 +2307,21 @@ public sealed class Plugin : IDalamudPlugin
     private float ComputeCurrentScale()
     {
         if (IsPvpManaModeActive())
+        {
+            // Death custom scale takes precedence over MP entirely
+            // while dead, per request - checked live here rather than
+            // written once on the death edge, because this branch
+            // recomputes from MP every frame and would overwrite any
+            // one-shot write immediately.
+            if (Configuration.PvpDeathCustomScaleEnabled && Condition[ConditionFlag.Unconscious])
+                return Configuration.PvpDeathCustomScale;
+
             return ManaScale.Compute(
                 manaTracker.GetManaFraction(),
                 Configuration.ManaInverted,
                 Configuration.PvpManaMinScale,
                 Configuration.PvpManaMaxScale);
+        }
 
         return JobScaleFromState();
     }
@@ -2336,15 +2391,41 @@ public sealed class Plugin : IDalamudPlugin
         // sliders. In accumulator mode there's no meaningful "remaining
         // time" to map, so it falls back to the scale-value-based
         // two-segment 0-200% mapping that mode has always used.
-        var foodPercent = Configuration.WaistUseRemainingTimeMode
-            ? (int)System.Math.Round(System.Math.Clamp(
-                WaistScale.ComputeRemainingTimePercent(lastKnownWellFedRemainingSeconds) + waistTransferBonusPercent, 0f, 300f))
-            : (int)System.Math.Round(System.Math.Clamp(
-                ScalePercent.ComputeTwoSegmentPercent(
-                    Configuration.CurrentWaistScale,
-                    Configuration.WaistMinScale,
-                    Configuration.WaistBaselineScale,
-                    Configuration.WaistMaxScale) + waistTransferBonusPercent, 0f, 300f));
+        // Food half. Three distinct sources, in precedence order -
+        // getting this wrong is exactly the bug where /food <number>
+        // visibly changed the body but the bar kept showing the
+        // buff-derived percentage:
+        //   1. PvP mana mode, or a manual /food override - both of
+        //      these are known only as a SCALE, so the percentage has
+        //      to be derived back OUT of that scale
+        //      (WaistScale.ScaleToPercent) rather than from buff time.
+        //   2. Remaining-time mode proper - derived from buff time.
+        //   3. Accumulator mode - the scale-value-based two-segment
+        //      mapping that mode has always used.
+        // The transfer bonus is added on top in every case, so the bar
+        // matches what's actually applied.
+        var waistPvpActiveForDtr = Configuration.WaistPvpManaEnabled && IsPvpManaModeActive();
+        float foodBasePercent;
+        if (waistPvpActiveForDtr || (Configuration.WaistUseRemainingTimeMode && waistManualOverrideScale is not null))
+        {
+            foodBasePercent = WaistScale.ScaleToPercent(
+                Configuration.CurrentWaistScale, Configuration.WaistMinScale, Configuration.WaistMaxScale);
+        }
+        else if (Configuration.WaistUseRemainingTimeMode)
+        {
+            foodBasePercent = WaistScale.ComputeRemainingTimePercent(lastKnownWellFedRemainingSeconds);
+        }
+        else
+        {
+            foodBasePercent = ScalePercent.ComputeTwoSegmentPercent(
+                Configuration.CurrentWaistScale,
+                Configuration.WaistMinScale,
+                Configuration.WaistBaselineScale,
+                Configuration.WaistMaxScale);
+        }
+
+        var foodPercent = (int)System.Math.Round(
+            System.Math.Clamp(foodBasePercent + waistTransferBonusPercent, 0f, 300f));
 
         if (milkPercent == lastDtrBarPercent && foodPercent == lastDtrBarWaistPercent)
             return;
@@ -2438,6 +2519,7 @@ public sealed class Plugin : IDalamudPlugin
         CommandManager.RemoveHandler(FoodCommandName);
         CommandManager.RemoveHandler(AssCommandName);
         CommandManager.RemoveHandler(TitsCommandName);
+        CommandManager.RemoveHandler(BoobsCommandName);
         dtrBarEntry.Remove();
         customizePlus.RevertScales();
         customizePlus.Dispose();

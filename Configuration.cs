@@ -107,6 +107,62 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool ResetScaleOnPvpExit { get; set; } = true;
 
+    /// <summary>
+    /// If true, dying during a PvP match forces breast scale to
+    /// PvpDeathCustomScale and holds it there until revival, ignoring
+    /// MP entirely for that duration - per request. Checked live inside
+    /// ComputeCurrentScale's PvP branch rather than as a one-shot write
+    /// on the death edge, since PvP mode recomputes from MP every frame
+    /// and would immediately overwrite anything written once. Off by
+    /// default.
+    /// </summary>
+    public bool PvpDeathCustomScaleEnabled { get; set; } = false;
+
+    /// <summary>The scale breast scaling is forced to while dead in PvP, when PvpDeathCustomScaleEnabled is on. Independent of the Mini-Game's own death-reset toggles, which don't apply during PvP.</summary>
+    public float PvpDeathCustomScale { get; set; } = 1.0f;
+
+    // --- Waist PvP, mirroring the four breast PvP settings above.
+    // Added per request so waist scaling behaves identically to breast
+    // scaling during PvP matches: same mana-driven range, same invert,
+    // same exit reset, same death custom scale. Each is a SEPARATE
+    // property rather than shared with the breast side, so the two
+    // meters can be tuned independently.
+
+    /// <summary>
+    /// If true, waist scale tracks MP during PvP matches, exactly as
+    /// breast scale does - overriding whichever normal waist model
+    /// (remaining-time or accumulator) would otherwise apply, for the
+    /// duration of the match. On by default, matching the breast side's
+    /// always-on PvP behavior; turn off to leave waist on its normal
+    /// model even during PvP.
+    /// </summary>
+    public bool WaistPvpManaEnabled { get; set; } = true;
+
+    /// <summary>Scale at 0% MP during PvP (or 100% if WaistManaInverted) - the waist counterpart to PvpManaMinScale.</summary>
+    public float PvpWaistManaMinScale { get; set; } = 0.80f;
+
+    /// <summary>Scale at 100% MP during PvP (or 0% if WaistManaInverted) - the waist counterpart to PvpManaMaxScale.</summary>
+    public float PvpWaistManaMaxScale { get; set; } = 1.20f;
+
+    /// <summary>Waist counterpart to ManaInverted - if true, waist shrinks as MP is restored rather than as it's spent.</summary>
+    public bool WaistManaInverted { get; set; } = false;
+
+    /// <summary>
+    /// Waist counterpart to ResetScaleOnPvpExit - if true, leaving a PvP
+    /// match resets waist scale to WaistBaselineScale. Note this only
+    /// meaningfully persists in accumulator mode; in remaining-time mode
+    /// the next tick recomputes from the buff anyway, which is the
+    /// correct behavior there (the buff is the source of truth) rather
+    /// than a bug.
+    /// </summary>
+    public bool ResetWaistScaleOnPvpExit { get; set; } = true;
+
+    /// <summary>Waist counterpart to PvpDeathCustomScaleEnabled.</summary>
+    public bool PvpWaistDeathCustomScaleEnabled { get; set; } = false;
+
+    /// <summary>The scale waist scaling is forced to while dead in PvP, when PvpWaistDeathCustomScaleEnabled is on.</summary>
+    public float PvpWaistDeathCustomScale { get; set; } = 1.0f;
+
     /// <summary>Chest scale with no food buff active.</summary>
     public float FoodMinScale { get; set; } = FoodScale.DefaultMinScale;
 
