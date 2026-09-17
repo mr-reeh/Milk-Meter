@@ -263,6 +263,9 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Overuse-bonus multiplier for Reprisal (all four tank jobs - see TrackedAbilityNames). 60s recast, same 2x-Provoke baseline as Equilibrium/Lucid Dreaming. See JobScale.GetOveruseMultiplier.</summary>
     public float ReprisalMultiplier { get; set; } = 2.0f;
 
+    /// <summary>Overuse-bonus multiplier for Rally (Beastmaster only - see TrackedAbilityNames). 90s recast once "Enhanced Rally" is learned at level 42, so 3x against Provoke's 30s baseline. See JobScale.GetOveruseMultiplier.</summary>
+    public float RallyMultiplier { get; set; } = 3.0f;
+
     /// <summary>
     /// Growth ceiling while in combat - the highest simply existing over
     /// time can grow the current job scale to while fighting. Using a

@@ -31,8 +31,10 @@ public enum JobTrackingKind
 /// Tracks the recast state of whichever job-relevant ability(-ies) apply
 /// to the player's current job/class (Provoke plus each tank job's own
 /// extra abilities - see TrackedAbilityNames; Second Wind for melee/
-/// physical ranged DPS; Lucid Dreaming for casters/healers; NONE for
-/// Beastmaster or any crafter/gatherer, which still get passive growth
+/// physical ranged DPS; Lucid Dreaming for casters/healers; Rally for
+/// Beastmaster, which can't use Role Actions at all but does have its
+/// own job-specific abilities; NONE for any crafter/gatherer, which
+/// still get passive growth
 /// via CombatGrowth but have no ability-based way to shrink it back
 /// down). Most jobs with a real tracked ability have exactly one, but
 /// several tanks have more - any one of them applies the overuse penalty
@@ -84,12 +86,8 @@ public sealed class JobBuffTracker
     // here, regardless of whether its list is empty) but has no
     // ability-based way to shrink it back down - GCD/Damage
     // Taken/Jumping (all mode-agnostic, see Plugin.cs) are the only
-    // levers left for those. Two genuinely distinct reasons a job/class
-    // ends up with an empty list rather than a real ability:
-    //   - Structurally can't use ANY tracked ability at all (Beastmaster
-    //     - a Limited Job explicitly barred from using Role Actions
-    //     entirely, confirmed via Square Enix's own official job guide
-    //     rather than assumed)
+    // levers left for those. The one remaining reason a job/class ends
+    // up with an empty list rather than a real ability:
     //   - Doesn't have an equivalent action/mechanic to this whole
     //     combat-oriented system in the first place (every crafter and
     //     gatherer - no Role Actions, no shared "GCD recast group" the
@@ -148,14 +146,18 @@ public sealed class JobBuffTracker
         ["PCT"] = ["Lucid Dreaming"],
         ["BLU"] = ["Lucid Dreaming"],
 
-        // Beastmaster - a Limited Job (like Blue Mage) explicitly barred
-        // from using ANY Role Action, confirmed via Square Enix's own
-        // official job guide (not assumed) - so unlike every combat job
-        // above, there is genuinely no ability to track here. Still
-        // gets passive growth (empty array, not a missing key - see the
-        // class-level comment above for the distinction that matters
-        // here) via GCD/Damage Taken/Jumping alone.
-        ["BST"] = [],
+        // Beastmaster - a Limited Job explicitly barred from using any
+        // Role Action, so none of the shared abilities above apply to
+        // it. It does however have its own job-specific abilities, and
+        // Rally (refills the Beastmaster's own TP gauge) is tracked here
+        // per request - confirmed as a real BST ability via the job's
+        // action list rather than assumed. Its recast is 90s once the
+        // "Enhanced Rally" trait is learned at level 42, which is the
+        // figure RallyMultiplier's 3x default is derived from (90s
+        // against Provoke's 30s baseline); below that level the base
+        // recast is longer, so the effective rate will differ slightly
+        // until 42.
+        ["BST"] = ["Rally"],
 
         // Crafters (DoH) - no Role Actions, no shared combat GCD recast
         // group, never enter ConditionFlag.InCombat. Passive growth
@@ -583,11 +585,12 @@ public static class JobScale
     /// The user-configurable overuse-bonus multiplier for a given ability
     /// name - fully in the user's hands via the settings window, not
     /// derived automatically. Defaults match each ability's real cooldown
-    /// relative to Provoke's 30s baseline (1x/2x/2x/2x/4x - Reprisal's
-    /// 60s recast puts it alongside Equilibrium/Lucid Dreaming at 2x).
-    /// Any ability name not one of the five below (shouldn't currently
-    /// happen, since these are the only ones in JobBuffTracker's
-    /// TrackedAbilityNames) falls back to 1x.
+    /// relative to Provoke's 30s baseline - Reprisal's 60s recast puts
+    /// it alongside Equilibrium/Lucid Dreaming at 2x, and Beastmaster's
+    /// Rally at 90s (post-Enhanced-Rally, learned at level 42) lands at
+    /// 3x. Any ability name not one of the six below (shouldn't
+    /// currently happen, since these are the only ones in
+    /// JobBuffTracker's TrackedAbilityNames) falls back to 1x.
     /// </summary>
     public static float GetOveruseMultiplier(string abilityName, Configuration config) => abilityName switch
     {
@@ -596,6 +599,7 @@ public static class JobScale
         "Lucid Dreaming" => config.LucidDreamingMultiplier,
         "Second Wind" => config.SecondWindMultiplier,
         "Reprisal" => config.ReprisalMultiplier,
+        "Rally" => config.RallyMultiplier,
         _ => 1f,
     };
 }

@@ -587,6 +587,13 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
+            var rallyMultiplier = configuration.RallyMultiplier;
+            if (ImGui.SliderFloat("Rally (Beastmaster)", ref rallyMultiplier, -5.0f, 5.0f, "%.2f"))
+            {
+                configuration.RallyMultiplier = rallyMultiplier;
+                configuration.Save();
+            }
+
             ImGui.TextDisabled("Using a tracked ability subtracts (Base Reduction Per Action x that ability's " +
                 "own multiplier above) from your current scale, stacking if you spam it - so overusing your " +
                 "job action can shrink size all the way down to Minimum Scaling. A negative multiplier flips " +
