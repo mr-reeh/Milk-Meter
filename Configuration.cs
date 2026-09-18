@@ -585,6 +585,20 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool SelfSuckingThresholdAutoAttentionEnabled { get; set; } = true;
 
+    /// <summary>
+    /// If true, the burp sound plays when the Self Sucking Threshold's
+    /// auto-attention-swap fires (after SelfSuckingBurpDelaySeconds).
+    /// Made toggleable per request; was previously unconditional
+    /// whenever the swap itself happened. Checked at PLAYBACK time
+    /// rather than when the burp is scheduled, so switching this off
+    /// during the delay cancels an already-queued burp rather than
+    /// letting it slip through. Turning this off doesn't disable the
+    /// auto-attention-swap itself - that's
+    /// SelfSuckingThresholdAutoAttentionEnabled above; this is only the
+    /// sound. On by default.
+    /// </summary>
+    public bool BurpSoundEnabled { get; set; } = true;
+
     /// <summary>How many seconds after the Self Sucking auto-attention-swap first reaches DazedDrainFloorScale before the burp sound (BurpSoundPlayer) plays. 0.5 by default.</summary>
     public float SelfSuckingBurpDelaySeconds { get; set; } = 0.1f;
 

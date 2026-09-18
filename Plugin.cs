@@ -1085,7 +1085,16 @@ public sealed class Plugin : IDalamudPlugin
         var waistPvpActive = Configuration.WaistPvpManaEnabled && IsPvpManaModeActive();
         if (waistPvpActive)
         {
-            if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
+            // Deliberately NOT gated on waistScaleFrozenUntilRevive,
+            // unlike every other waist branch below. That flag exists
+            // for the Mini-Game-side death reset, which no longer fires
+            // during PvP at all (see the death-check block) - but a
+            // flag set just before a match started could otherwise
+            // still be lingering and would silently block this whole
+            // branch, which is exactly the bug that made the PvP death
+            // scale appear not to work. PvP death handling is the
+            // ternary immediately below instead.
+            if (!Configuration.WaistScalingPaused)
             {
                 Configuration.CurrentWaistScale =
                     Configuration.PvpWaistDeathCustomScaleEnabled && Condition[ConditionFlag.Unconscious]
@@ -1198,7 +1207,7 @@ public sealed class Plugin : IDalamudPlugin
 
         } // end of accumulator-mode "else" - see WaistUseRemainingTimeMode's branch above
 
-        if (!Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
+        if (!waistPvpActive && !Configuration.WaistScalingPaused && !waistScaleFrozenUntilRevive)
         {
             // Defensive re-clamp in case Min/Max were edited at runtime
             // to a range that no longer contains the current value. Also
@@ -1207,9 +1216,15 @@ public sealed class Plugin : IDalamudPlugin
             // is that CurrentWaistScale stays EXACTLY at whatever death
             // set it to, and even a defensive re-clamp could move it if
             // Min/Max were edited to a range that no longer contains
-            // that exact death-reset value. Applies in BOTH modes -
-            // remaining-time mode already clamps internally, so this is
+            // that exact death-reset value. Applies in BOTH normal modes
+            // - remaining-time mode already clamps internally, so this is
             // purely belt-and-braces there rather than load-bearing.
+            //
+            // Skipped during waist PvP too: that mode has its own
+            // independent PvpWaistManaMin/MaxScale bounds and its own
+            // PvP death scale, none of which need to sit inside the
+            // normal Min/Max range - clamping them to it would silently
+            // clip a perfectly valid PvP value.
             Configuration.CurrentWaistScale = WaistScale.Clamp(
                 Configuration.CurrentWaistScale, Configuration.WaistMinScale, Configuration.WaistMaxScale);
         }
@@ -1230,13 +1245,23 @@ public sealed class Plugin : IDalamudPlugin
         if (pendingBurpPlayTime is { } scheduledTime && ImGuiNowSeconds() >= scheduledTime)
         {
             pendingBurpPlayTime = null;
-            try
+
+            // Checked HERE at playback time rather than at scheduling
+            // time, so toggling the sound off mid-delay cancels a burp
+            // that's already queued instead of letting it slip through.
+            // The pendingBurpPlayTime clear above still happens either
+            // way, so a disabled burp doesn't sit queued forever waiting
+            // to fire the moment it's re-enabled.
+            if (Configuration.BurpSoundEnabled)
             {
-                burpSoundPlayer.Play();
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "[MilkMeter] Self Sucking Threshold burp sound failed to play.");
+                try
+                {
+                    burpSoundPlayer.Play();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "[MilkMeter] Self Sucking Threshold burp sound failed to play.");
+                }
             }
         }
 
@@ -1347,15 +1372,30 @@ public sealed class Plugin : IDalamudPlugin
                     forceImmediate = true;
                 }
 
-                if (Configuration.ResetWaistScaleToMinimumOnDeath)
+                // Skipped entirely while waist PvP mana mode is active,
+                // per the same principle that already keeps the
+                // Mini-Game's own death-reset from interfering with
+                // breast scaling during PvP: PvP has its OWN death
+                // handling (PvpWaistDeathCustomScaleEnabled, checked
+                // live inside the waist PvP block above), and letting
+                // this one fire too was an outright bug - it both
+                // slammed CurrentWaistScale down to Minimum (reading 0%
+                // on the DTR bar) AND set waistScaleFrozenUntilRevive,
+                // which then blocked the waist PvP block from running at
+                // all for the rest of the death, so the configured PvP
+                // death scale never got a chance to apply.
+                if (!waistPvpActive)
                 {
-                    Configuration.CurrentWaistScale = Configuration.WaistMinScale;
-                    waistScaleFrozenUntilRevive = true;
-                }
-                else if (Configuration.ResetWaistScaleToBaselineOnDeath)
-                {
-                    Configuration.CurrentWaistScale = Configuration.WaistBaselineScale;
-                    waistScaleFrozenUntilRevive = true;
+                    if (Configuration.ResetWaistScaleToMinimumOnDeath)
+                    {
+                        Configuration.CurrentWaistScale = Configuration.WaistMinScale;
+                        waistScaleFrozenUntilRevive = true;
+                    }
+                    else if (Configuration.ResetWaistScaleToBaselineOnDeath)
+                    {
+                        Configuration.CurrentWaistScale = Configuration.WaistBaselineScale;
+                        waistScaleFrozenUntilRevive = true;
+                    }
                 }
             }
             else if (!unconscious && lastUnconscious)
@@ -2386,27 +2426,32 @@ public sealed class Plugin : IDalamudPlugin
             Configuration.JobUpperLimitScale));
 
         // Food half: in remaining-time mode this maps TIME directly onto
-        // percent (0% no buff, 100% at 30 min, 200% at 60, 300% at 90 -
-        // per request), entirely independent of the Min/Max scale
-        // sliders. In accumulator mode there's no meaningful "remaining
-        // time" to map, so it falls back to the scale-value-based
-        // two-segment 0-200% mapping that mode has always used.
-        // Food half. Three distinct sources, in precedence order -
+        // Food half. Four distinct sources, in precedence order -
         // getting this wrong is exactly the bug where /food <number>
         // visibly changed the body but the bar kept showing the
         // buff-derived percentage:
-        //   1. PvP mana mode, or a manual /food override - both of
-        //      these are known only as a SCALE, so the percentage has
-        //      to be derived back OUT of that scale
-        //      (WaistScale.ScaleToPercent) rather than from buff time.
-        //   2. Remaining-time mode proper - derived from buff time.
-        //   3. Accumulator mode - the scale-value-based two-segment
+        //   1. Waist PvP mana mode - known only as a SCALE, and measured
+        //      against the PVP range rather than the normal one.
+        //   2. A manual /food override - also known only as a scale, but
+        //      measured against the normal range.
+        //   3. Remaining-time mode proper - derived from buff time.
+        //   4. Accumulator mode - the scale-value-based two-segment
         //      mapping that mode has always used.
         // The transfer bonus is added on top in every case, so the bar
         // matches what's actually applied.
         var waistPvpActiveForDtr = Configuration.WaistPvpManaEnabled && IsPvpManaModeActive();
         float foodBasePercent;
-        if (waistPvpActiveForDtr || (Configuration.WaistUseRemainingTimeMode && waistManualOverrideScale is not null))
+        if (waistPvpActiveForDtr)
+        {
+            // Mapped against the PVP range, not the normal Min/Max -
+            // PvP has its own independent bounds, so measuring a PvP
+            // scale against the normal range would misreport it (often
+            // as a flat 0% or 300%, since the two ranges need not
+            // overlap at all).
+            foodBasePercent = WaistScale.ScaleToPercent(
+                Configuration.CurrentWaistScale, Configuration.PvpWaistManaMinScale, Configuration.PvpWaistManaMaxScale);
+        }
+        else if (Configuration.WaistUseRemainingTimeMode && waistManualOverrideScale is not null)
         {
             foodBasePercent = WaistScale.ScaleToPercent(
                 Configuration.CurrentWaistScale, Configuration.WaistMinScale, Configuration.WaistMaxScale);

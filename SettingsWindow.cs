@@ -452,6 +452,15 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
+            var burpSoundEnabled = configuration.BurpSoundEnabled;
+            if (ImGui.Checkbox("Burp Sound", ref burpSoundEnabled))
+            {
+                configuration.BurpSoundEnabled = burpSoundEnabled;
+                configuration.Save();
+            }
+            ImGui.TextDisabled("Plays the burp sound when the swap above fires. Turning this off leaves " +
+                "the auto-attention-swap itself working - it only silences the sound. On by default.");
+
             var selfSuckingBurpDelay = configuration.SelfSuckingBurpDelaySeconds;
             if (ImGui.SliderFloat("Self Sucking Burp Delay (Seconds)", ref selfSuckingBurpDelay, 0.0f, 3.0f, "%.1f"))
             {
