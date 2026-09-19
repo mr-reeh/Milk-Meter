@@ -24,18 +24,22 @@ namespace MilkMeter;
 /// Character.Mode never reaches EmoteLoop for it) - it's back to /dazed
 /// (ModeParam 79, confirmed working via the process below).
 ///
-/// The specific numeric ModeParam values for /shakedrink (76), /dazed
-/// (79), /water (75), /attention (29), and /guard (58) were NOT guessed - no public
-/// verified mapping from FFXIVClientStructs' "EmoteMode" index back to
-/// a named emote was found, so rather than guess (which given this
-/// project's history with duplicate/misleading IDs elsewhere - see
-/// JobScale.cs's ResolveActionId - would likely be wrong), all five
-/// were confirmed via /milkmeter emotedebug while actually
-/// performing each emote and reading the real value back. All remain
-/// fully user-configurable in the settings window in case a game update
-/// changes them, or for swapping to yet another (looping) emote later -
-/// a value of -1 falls back to matching ANY looping emote rather than
-/// one specific one.
+/// The specific numeric ModeParam values below were NOT guessed - no
+/// public verified mapping from FFXIVClientStructs' "EmoteMode" index
+/// back to a named emote was found, so rather than guess (which given
+/// this project's history with duplicate/misleading IDs elsewhere - see
+/// JobScale.cs's ResolveActionId - would likely be wrong), each was
+/// confirmed via /milkmeter emotedebug while actually performing the
+/// emote and reading the real value back.
+///
+/// These are fixed constants rather than user-configurable settings,
+/// per request - they were originally exposed as sliders in the
+/// settings window (with -1 meaning "match ANY looping emote") as a
+/// hedge against a game update changing them, but in practice that
+/// flexibility only created a way to misconfigure the plugin into
+/// strange states. If a game update ever does change one,
+/// /milkmeter emotedebug still reports the live value, and the
+/// constant here is a one-line fix.
 ///
 /// player.Address (the native object's memory address, reinterpreted
 /// here as a FFXIVClientStructs Character*) is a new API surface for
@@ -61,62 +65,64 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
         }
     }
 
-    /// <summary>True while any looping emote is active, further narrowed to only Configuration.ShakeDrinkEmoteModeParam's specific value once that's been set (non-negative).</summary>
-    public bool IsShakeDrinkActive(Configuration configuration) => IsMatchingEmoteActive(configuration.ShakeDrinkEmoteModeParam);
+    // Fixed ModeParam values for every emote this plugin watches, all
+    // confirmed via /milkmeter emotedebug (see the class doc comment).
+    // Constants rather than config properties, per request.
+    public const byte ShakeDrinkModeParam = 76;   // Breast Massage
+    public const byte DazedModeParam = 79;        // Self Sucking Drain
+    public const byte WaterModeParam = 75;        // Breast Feeding Drain
+    public const byte AttentionModeParam = 29;    // wakes the HUD gauge
+    public const byte AtEaseModeParam = 30;       // At-Ease auto-trigger
+    public const byte CharmedModeParam = 33;      // suppresses the auto-trigger
+    public const byte BallDanceModeParam = 6;     // suppresses the auto-trigger
 
-    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.DazedEmoteModeParam.</summary>
-    public bool IsDazedActive(Configuration configuration) => IsMatchingEmoteActive(configuration.DazedEmoteModeParam);
+    /// <summary>True while the /shakedrink ("Breast Massage") looping emote is active.</summary>
+    public bool IsShakeDrinkActive() => IsMatchingEmoteActive(ShakeDrinkModeParam);
 
-    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.WaterEmoteModeParam - /water ("Breast Feeding Drain"), a second independent drain-toward-a-floor mechanic alongside /dazed.</summary>
-    public bool IsWaterActive(Configuration configuration) => IsMatchingEmoteActive(configuration.WaterEmoteModeParam);
+    /// <summary>True while the /dazed ("Self Sucking Drain") looping emote is active.</summary>
+    public bool IsDazedActive() => IsMatchingEmoteActive(DazedModeParam);
 
-    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.AttentionEmoteModeParam - /attention, confirmed ModeParam 29, used to wake the HUD gauge from its idle fade rather than affect the scale itself.</summary>
-    public bool IsAttentionActive(Configuration configuration) => IsMatchingEmoteActive(configuration.AttentionEmoteModeParam);
+    /// <summary>True while the /water ("Breast Feeding Drain") looping emote is active - a second independent drain-toward-a-floor mechanic alongside /dazed.</summary>
+    public bool IsWaterActive() => IsMatchingEmoteActive(WaterModeParam);
 
-    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.GuardEmoteModeParam - /guard, confirmed ModeParam 58, forced by Plugin.cs's guard-auto-trigger rather than affecting the scale itself.</summary>
-    public bool IsGuardActive(Configuration configuration) => IsMatchingEmoteActive(configuration.GuardEmoteModeParam);
+    /// <summary>True while /attention is active - used to wake the HUD gauge from its idle fade rather than affect the scale itself.</summary>
+    public bool IsAttentionActive() => IsMatchingEmoteActive(AttentionModeParam);
 
-    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.CharmedEmoteModeParam - the "Charmed" crowd-control status (ModeParam 33), used by Plugin.cs to suppress the guard auto-trigger while active per request, so it doesn't interrupt it.</summary>
-    public bool IsCharmedActive(Configuration configuration) => IsMatchingEmoteActive(configuration.CharmedEmoteModeParam);
+    /// <summary>True while /atease is active - forced by Plugin.cs's At-Ease auto-trigger rather than affecting the scale itself.</summary>
+    public bool IsAtEaseActive() => IsMatchingEmoteActive(AtEaseModeParam);
 
-    /// <summary>Mirror of IsShakeDrinkActive() for Configuration.BallDanceEmoteModeParam - the "Ball Dance" emote/animation (ModeParam 6), used by Plugin.cs to suppress the guard auto-trigger while active per request, so it doesn't interrupt it.</summary>
-    public bool IsBallDanceActive(Configuration configuration) => IsMatchingEmoteActive(configuration.BallDanceEmoteModeParam);
+    /// <summary>True while the "Charmed" crowd-control status is active - used by Plugin.cs to suppress the At-Ease auto-trigger so it doesn't interrupt it.</summary>
+    public bool IsCharmedActive() => IsMatchingEmoteActive(CharmedModeParam);
+
+    /// <summary>True while the "Ball Dance" emote/animation is active - used by Plugin.cs to suppress the At-Ease auto-trigger so it doesn't interrupt it.</summary>
+    public bool IsBallDanceActive() => IsMatchingEmoteActive(BallDanceModeParam);
 
     /// <summary>
     /// True while SOME looping emote is active that is NOT one of the
     /// five specifically tracked ones (shakedrink, dazed, water,
-    /// attention, guard). Originally used by Plugin.cs's guard-auto-trigger as one of
-    /// its firing conditions, but that requirement was removed per
-    /// request - the guard trigger no longer checks this at all. Kept
-    /// around purely as diagnostic info in GetDebugInfo() below (still
-    /// genuinely useful to see), not because anything depends on its
-    /// result functionally anymore.
+    /// attention, atease). Originally used by Plugin.cs's At-Ease
+    /// auto-trigger as one of its firing conditions, but that
+    /// requirement was removed per request - the trigger no longer
+    /// checks this at all. Kept purely as diagnostic info in
+    /// GetDebugInfo() below (still genuinely useful to see), not because
+    /// anything depends on its result functionally anymore.
     ///
-    /// Correctly honors the "-1 = matches ANY looping emote" wildcard
-    /// convention the other five properties already use - if any one of
-    /// them were set to -1, that would mean "every looping emote counts
-    /// as this one," so nothing could ever be genuinely "other" while
-    /// that's configured; a plain numeric != comparison against -1
-    /// would have missed this (a byte ModeParam is never actually -1).
+    /// The old "-1 means match ANY looping emote" wildcard handling this
+    /// used to need is gone along with the configurable ModeParams -
+    /// every value is now a fixed, specific constant, so a plain !=
+    /// comparison against each is sufficient.
     /// </summary>
-    public bool IsOtherLoopingEmoteActive(Configuration configuration)
+    public bool IsOtherLoopingEmoteActive()
     {
         var (mode, modeParam) = ReadState();
         if (mode != CharacterModes.EmoteLoop)
             return false;
 
-        if (configuration.ShakeDrinkEmoteModeParam < 0
-            || configuration.DazedEmoteModeParam < 0
-            || configuration.WaterEmoteModeParam < 0
-            || configuration.AttentionEmoteModeParam < 0
-            || configuration.GuardEmoteModeParam < 0)
-            return false;
-
-        return modeParam != configuration.ShakeDrinkEmoteModeParam
-            && modeParam != configuration.DazedEmoteModeParam
-            && modeParam != configuration.WaterEmoteModeParam
-            && modeParam != configuration.AttentionEmoteModeParam
-            && modeParam != configuration.GuardEmoteModeParam;
+        return modeParam != ShakeDrinkModeParam
+            && modeParam != DazedModeParam
+            && modeParam != WaterModeParam
+            && modeParam != AttentionModeParam
+            && modeParam != AtEaseModeParam;
     }
 
     private bool IsMatchingEmoteActive(int configuredModeParam)
@@ -125,34 +131,20 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
         if (mode != CharacterModes.EmoteLoop)
             return false;
 
-        return configuredModeParam < 0 || modeParam == configuredModeParam;
+        return modeParam == configuredModeParam;
     }
 
-    public string GetDebugInfo(Configuration configuration)
+    public string GetDebugInfo()
     {
         var (mode, modeParam) = ReadState();
         return $"Mode: {mode} ({(byte)mode}), ModeParam: {modeParam}\n" +
-            $"Configured ShakeDrinkEmoteModeParam: {configuration.ShakeDrinkEmoteModeParam} " +
-            $"({(configuration.ShakeDrinkEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
-            $"currently active: {IsShakeDrinkActive(configuration)}\n" +
-            $"Configured DazedEmoteModeParam: {configuration.DazedEmoteModeParam} " +
-            $"({(configuration.DazedEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
-            $"currently active: {IsDazedActive(configuration)}\n" +
-            $"Configured WaterEmoteModeParam: {configuration.WaterEmoteModeParam} " +
-            $"({(configuration.WaterEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
-            $"currently active: {IsWaterActive(configuration)}\n" +
-            $"Configured AttentionEmoteModeParam: {configuration.AttentionEmoteModeParam} " +
-            $"({(configuration.AttentionEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
-            $"currently active: {IsAttentionActive(configuration)}\n" +
-            $"Configured GuardEmoteModeParam: {configuration.GuardEmoteModeParam} " +
-            $"({(configuration.GuardEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
-            $"currently active: {IsGuardActive(configuration)}\n" +
-            $"Configured CharmedEmoteModeParam: {configuration.CharmedEmoteModeParam} " +
-            $"({(configuration.CharmedEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
-            $"currently active: {IsCharmedActive(configuration)} (suppresses the guard auto-trigger while active)\n" +
-            $"Configured BallDanceEmoteModeParam: {configuration.BallDanceEmoteModeParam} " +
-            $"({(configuration.BallDanceEmoteModeParam < 0 ? "unset - matches ANY looping emote" : "set - matches only this specific value")}), " +
-            $"currently active: {IsBallDanceActive(configuration)} (suppresses the guard auto-trigger while active)\n" +
-            $"Some OTHER (untracked) looping emote active: {IsOtherLoopingEmoteActive(configuration)}";
+            $"ShakeDrink (fixed {ShakeDrinkModeParam}), currently active: {IsShakeDrinkActive()}\n" +
+            $"Dazed (fixed {DazedModeParam}), currently active: {IsDazedActive()}\n" +
+            $"Water (fixed {WaterModeParam}), currently active: {IsWaterActive()}\n" +
+            $"Attention (fixed {AttentionModeParam}), currently active: {IsAttentionActive()}\n" +
+            $"At-Ease (fixed {AtEaseModeParam}), currently active: {IsAtEaseActive()}\n" +
+            $"Charmed (fixed {CharmedModeParam}), currently active: {IsCharmedActive()} (suppresses the At-Ease auto-trigger while active)\n" +
+            $"Ball Dance (fixed {BallDanceModeParam}), currently active: {IsBallDanceActive()} (suppresses the At-Ease auto-trigger while active)\n" +
+            $"Some OTHER (untracked) looping emote active: {IsOtherLoopingEmoteActive()}";
     }
 }

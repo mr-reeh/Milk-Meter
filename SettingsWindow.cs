@@ -352,12 +352,6 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
-            var shakeDrinkModeParam = configuration.ShakeDrinkEmoteModeParam;
-            if (ImGui.InputInt("Shake Drink ModeParam (-1 = Any Looping Emote)", ref shakeDrinkModeParam))
-            {
-                configuration.ShakeDrinkEmoteModeParam = shakeDrinkModeParam;
-                configuration.Save();
-            }
             ImGui.TextDisabled("While /shakedrink is active, scale grows at the flat rate above (a " +
                 "separate, independent value - no longer tied to Passive Scale Gen) and targets Maximum " +
                 "Scaling (In Combat) even out of combat - reverting instantly once the " +
@@ -385,16 +379,9 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
-            var dazedModeParam = configuration.DazedEmoteModeParam;
-            if (ImGui.InputInt("Dazed ModeParam (-1 = Any Looping Emote)", ref dazedModeParam))
-            {
-                configuration.DazedEmoteModeParam = dazedModeParam;
-                configuration.Save();
-            }
             ImGui.TextDisabled("Mirror opposite of Shake Drink: while /dazed is active, scale drains " +
                 "dramatically toward Dazed Drain Floor (a separate value from Minimum Scaling) instead " +
-                "of growing - reverting instantly once the emote stops. ModeParam default (79) " +
-                "confirmed via /milkmeter emotedebug.");
+                "of growing - reverting instantly once the emote stops.");
 
             var dazedTransferEnabled = configuration.DazedTransferToFoodEnabled;
             if (ImGui.Checkbox("Transfer Drained Milk % to Food %", ref dazedTransferEnabled))
@@ -433,17 +420,11 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
-            var waterModeParam = configuration.WaterEmoteModeParam;
-            if (ImGui.InputInt("Water ModeParam (-1 = Any Looping Emote)", ref waterModeParam))
-            {
-                configuration.WaterEmoteModeParam = waterModeParam;
-                configuration.Save();
-            }
             ImGui.TextDisabled("A second, independent drain alongside Self Sucking Drain above: while " +
                 "/water is active, scale drains dramatically toward Water Drain Floor (its own " +
                 "separate value) instead of growing - reverting instantly once the emote stops. Only " +
                 "one looping emote can be active at a time, so this and Self Sucking Drain never run " +
-                "simultaneously. ModeParam default (75) confirmed via /milkmeter emotedebug.");
+                "simultaneously.");
 
             var selfSuckingAutoAttention = configuration.SelfSuckingThresholdAutoAttentionEnabled;
             if (ImGui.Checkbox("Self Sucking Threshold (/dazed to /attention)", ref selfSuckingAutoAttention))
@@ -487,75 +468,49 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
-            var attentionModeParam = configuration.AttentionEmoteModeParam;
-            if (ImGui.InputInt("Attention ModeParam (-1 = Any Looping Emote)", ref attentionModeParam))
-            {
-                configuration.AttentionEmoteModeParam = attentionModeParam;
-                configuration.Save();
-            }
             ImGui.TextDisabled("While /attention is active, wakes the HUD gauge from its idle fade - " +
                 "doesn't touch the scale itself at all, purely a way to check the gauge's current status " +
-                "without needing to use an ability or take damage first. ModeParam default (29) " +
-                "confirmed via /milkmeter emotedebug.");
+                "without needing to use an ability or take damage first.");
 
-            var guardEnabled = configuration.GuardAutoTriggerEnabled;
-            if (ImGui.Checkbox("Guard Auto-Trigger", ref guardEnabled))
+            var atEaseEnabled = configuration.AtEaseAutoTriggerEnabled;
+            if (ImGui.Checkbox("At-Ease Auto-Trigger", ref atEaseEnabled))
             {
-                configuration.GuardAutoTriggerEnabled = guardEnabled;
+                configuration.AtEaseAutoTriggerEnabled = atEaseEnabled;
                 configuration.Save();
             }
 
-            var guardOutOfCombatOnly = configuration.GuardAutoTriggerOutOfCombatOnly;
-            if (ImGui.Checkbox("Auto-Trigger Only Outside Combat", ref guardOutOfCombatOnly))
+            var atEaseOutOfCombatOnly = configuration.AtEaseAutoTriggerOutOfCombatOnly;
+            if (ImGui.Checkbox("Auto-Trigger Only Outside Combat", ref atEaseOutOfCombatOnly))
             {
-                configuration.GuardAutoTriggerOutOfCombatOnly = guardOutOfCombatOnly;
+                configuration.AtEaseAutoTriggerOutOfCombatOnly = atEaseOutOfCombatOnly;
                 configuration.Save();
             }
             ImGui.TextDisabled("When on, the auto-trigger above stays fully suppressed while actually " +
                 "in combat, regardless of threshold/standing-still/Charmed/Ball Dance - it only fires " +
                 "once you're out of combat. Off by default.");
 
-            var guardThreshold = configuration.GuardThresholdScale;
-            if (ImGui.SliderFloat("Guard Threshold", ref guardThreshold, 0.10f, 3.00f, "%.2f"))
+            var atEaseThreshold = configuration.AtEaseThresholdScale;
+            if (ImGui.SliderFloat("At-Ease Threshold", ref atEaseThreshold, 0.10f, 3.00f, "%.2f"))
             {
-                configuration.GuardThresholdScale = guardThreshold;
+                configuration.AtEaseThresholdScale = atEaseThreshold;
                 configuration.Save();
             }
 
-            var guardModeParam = configuration.GuardEmoteModeParam;
-            if (ImGui.InputInt("Guard ModeParam (-1 = Any Looping Emote)", ref guardModeParam))
-            {
-                configuration.GuardEmoteModeParam = guardModeParam;
-                configuration.Save();
-            }
-            ImGui.TextDisabled("Forces \"/guard motion\" once per second for as long as scale is at or " +
+            ImGui.TextDisabled("Forces \"/atease motion\" once per second for as long as scale is at or " +
                 "above the threshold above AND you're standing still - both at once, repeating on its " +
-                "own rather than firing just once. ModeParam " +
-                "default (58) confirmed via /milkmeter emotedebug.");
+                "own rather than firing just once.");
 
-            var guardWakeEnabled = configuration.GuardWakeEnabled;
-            if (ImGui.Checkbox("Guard Wakes HUD Gauge", ref guardWakeEnabled))
+            var atEaseWakeEnabled = configuration.AtEaseWakeEnabled;
+            if (ImGui.Checkbox("At-Ease Wakes HUD Gauge", ref atEaseWakeEnabled))
             {
-                configuration.GuardWakeEnabled = guardWakeEnabled;
+                configuration.AtEaseWakeEnabled = atEaseWakeEnabled;
                 configuration.Save();
             }
-            ImGui.TextDisabled("While /guard is active (whether forced above or performed manually), " +
+            ImGui.TextDisabled("While /atEase is active (whether forced above or performed manually), " +
                 "wakes the HUD gauge from its idle fade - same as Check Breasts (/attention) does.");
 
-            var charmedModeParam = configuration.CharmedEmoteModeParam;
-            if (ImGui.InputInt("Charmed ModeParam", ref charmedModeParam))
-            {
-                configuration.CharmedEmoteModeParam = charmedModeParam;
-                configuration.Save();
-            }
 
-            var ballDanceModeParam = configuration.BallDanceEmoteModeParam;
-            if (ImGui.InputInt("Ball Dance ModeParam", ref ballDanceModeParam))
-            {
-                configuration.BallDanceEmoteModeParam = ballDanceModeParam;
-                configuration.Save();
-            }
-            ImGui.TextDisabled("The Guard Auto-Trigger above is suppressed entirely while either of these " +
+            ImGui.TextDisabled("The At-Ease Auto-Trigger above is suppressed entirely while either of these " +
                 "is active, so it doesn't interrupt them. Defaults: Charmed = 33, Ball Dance = 6.");
 
             ImGui.TextDisabled("Ability Multipliers (Base Reduction x Multiplier = Amount Subtracted Per Use - " +

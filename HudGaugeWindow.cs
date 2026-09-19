@@ -223,7 +223,7 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
     /// Trigger() itself, and separately by Plugin.cs for events that
     /// should count as "activity" without necessarily firing a particle
     /// burst (the increase-variant events, active shakedrink-boosted
-    /// growth, the dedicated /attention/guard emotes, and - if
+    /// growth, the dedicated /attention/atEase emotes, and - if
     /// HudShowAboveScaleEnabled is on - the applied scale being at or
     /// above HudShowAboveScaleThreshold).
     /// </summary>

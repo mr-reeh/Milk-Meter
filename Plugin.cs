@@ -289,7 +289,7 @@ public sealed class Plugin : IDalamudPlugin
     // immediately following, with isJumping never having gone false -
     // still counts as its own jump. lastPlayerY is this block's own
     // dedicated position-tracking field, deliberately separate from the
-    // Guard trigger's lastPlayerPosition further below, since that one
+    // AtEase trigger's lastPlayerPosition further below, since that one
     // isn't guaranteed to be updated yet by the point this block runs
     // each tick. The velocity threshold itself is
     // Configuration.JumpVelocityThreshold - a GUESSED starting value,
@@ -317,7 +317,7 @@ public sealed class Plugin : IDalamudPlugin
     // threshold state at playback time.
     private double? pendingBurpPlayTime;
 
-    // Periodic re-trigger timer for the guard auto-trigger (once per
+    // Periodic re-trigger timer for the atEase auto-trigger (once per
     // second, matching DazedBurstIntervalSeconds's own established
     // pattern below) - -1 sentinel means "never fired yet", so the very
     // first tick where conditions are met fires immediately rather than
@@ -325,10 +325,10 @@ public sealed class Plugin : IDalamudPlugin
     // earlier version fired once and waited for conditions to reset) -
     // this now keeps re-forcing the emote once per second for as long
     // as both conditions hold, per request.
-    private const double GuardTriggerIntervalSeconds = 1.0;
-    private double lastGuardTriggerTime = -1d;
+    private const double AtEaseTriggerIntervalSeconds = 1.0;
+    private double lastAtEaseTriggerTime = -1d;
 
-    // Frame-to-frame position tracking for the guard auto-trigger's
+    // Frame-to-frame position tracking for the atEase auto-trigger's
     // "standing still" condition - a new kind of check for this
     // project, but built on ObjectTable.LocalPlayer.Position, an
     // extremely standard, fundamental Dalamud game-object property
@@ -473,10 +473,10 @@ public sealed class Plugin : IDalamudPlugin
                 + "'rebaseline' re-reads your current chest scale as the new baseline. "
                 + "'dumpprofile' prints your active Customize+ profile's raw JSON to /xllog. "
                 + "'jobdebug' prints diagnostic info for Job Buff mode's ability/cooldown lookup. "
-                + "'emotedebug' prints your current Character.Mode/ModeParam - use while performing "
-                + "/shakedrink, /dazed, /water, /attention, or /guard to find the ShakeDrinkEmoteModeParam/"
-                + "DazedEmoteModeParam/WaterEmoteModeParam/AttentionEmoteModeParam/GuardEmoteModeParam values for precise "
-                + "emote matching. 'guarddebug' breaks down the guard auto-trigger's two conditions "
+                + "'emotedebug' prints your current Character.Mode/ModeParam alongside every emote this "
+                + "plugin watches and whether each is currently active - these values are fixed constants "
+                + "now rather than settings, so this is purely diagnostic. "
+                + "'ateasedebug' breaks down the At-Ease auto-trigger's two conditions "
                 + "(scale threshold, standing-still) separately, plus when it'll next fire. "
                 + "'gcddebug' shows the configured GCD recast group's live cooldown state - use it "
                 + "while pressing different GCD spells/weaponskills to confirm or correct "
@@ -819,32 +819,32 @@ public sealed class Plugin : IDalamudPlugin
 
         if (args.Equals("emotedebug", System.StringComparison.OrdinalIgnoreCase))
         {
-            Log.Information($"[MilkMeter] Emote debug info:\n{emoteLoopTracker.GetDebugInfo(Configuration)}");
+            Log.Information($"[MilkMeter] Emote debug info:\n{emoteLoopTracker.GetDebugInfo()}");
             return;
         }
 
-        if (args.Equals("guarddebug", System.StringComparison.OrdinalIgnoreCase))
+        if (args.Equals("ateasedebug", System.StringComparison.OrdinalIgnoreCase))
         {
-            var scaleAtOrAbove = jobCurrentScale >= Configuration.GuardThresholdScale;
+            var scaleAtOrAbove = jobCurrentScale >= Configuration.AtEaseThresholdScale;
             var secondsSinceMovement = lastPlayerMovementTime >= 0d ? ImGuiNowSeconds() - lastPlayerMovementTime : (double?)null;
             var standingStill = lastPlayerMovementTime >= 0d && secondsSinceMovement >= PositionStillnessRequiredSeconds;
-            var charmedActive = emoteLoopTracker.IsCharmedActive(Configuration);
-            var ballDanceActive = emoteLoopTracker.IsBallDanceActive(Configuration);
-            var guardSuppressed = charmedActive || ballDanceActive;
+            var charmedActive = emoteLoopTracker.IsCharmedActive();
+            var ballDanceActive = emoteLoopTracker.IsBallDanceActive();
+            var atEaseSuppressed = charmedActive || ballDanceActive;
             var inCombatNow = Condition[ConditionFlag.InCombat];
-            var combatSuppressed = Configuration.GuardAutoTriggerOutOfCombatOnly && inCombatNow;
-            var wouldTrigger = Configuration.GuardAutoTriggerEnabled && scaleAtOrAbove && standingStill && !guardSuppressed && !combatSuppressed;
-            var secondsUntilNextFire = lastGuardTriggerTime < 0d
+            var combatSuppressed = Configuration.AtEaseAutoTriggerOutOfCombatOnly && inCombatNow;
+            var wouldTrigger = Configuration.AtEaseAutoTriggerEnabled && scaleAtOrAbove && standingStill && !atEaseSuppressed && !combatSuppressed;
+            var secondsUntilNextFire = lastAtEaseTriggerTime < 0d
                 ? 0d
-                : System.Math.Max(0d, GuardTriggerIntervalSeconds - (ImGuiNowSeconds() - lastGuardTriggerTime));
+                : System.Math.Max(0d, AtEaseTriggerIntervalSeconds - (ImGuiNowSeconds() - lastAtEaseTriggerTime));
 
-            Log.Information("[MilkMeter] Guard auto-trigger debug info:\n" +
-                $"GuardAutoTriggerEnabled: {Configuration.GuardAutoTriggerEnabled}\n" +
-                $"Current job scale: {jobCurrentScale:F3}, GuardThresholdScale: {Configuration.GuardThresholdScale:F3}, at or above threshold: {scaleAtOrAbove}\n" +
+            Log.Information("[MilkMeter] At-Ease auto-trigger debug info:\n" +
+                $"AtEaseAutoTriggerEnabled: {Configuration.AtEaseAutoTriggerEnabled}\n" +
+                $"Current job scale: {jobCurrentScale:F3}, AtEaseThresholdScale: {Configuration.AtEaseThresholdScale:F3}, at or above threshold: {scaleAtOrAbove}\n" +
                 $"Seconds since last movement: {(secondsSinceMovement.HasValue ? secondsSinceMovement.Value.ToString("F2") : "never moved yet")}, " +
                 $"required: {PositionStillnessRequiredSeconds:F1}, standing still: {standingStill}\n" +
                 $"Charmed active: {charmedActive}, Ball Dance active: {ballDanceActive} (either one suppresses the trigger entirely)\n" +
-                $"GuardAutoTriggerOutOfCombatOnly: {Configuration.GuardAutoTriggerOutOfCombatOnly}, currently in combat: {inCombatNow}, suppressed by this: {combatSuppressed}\n" +
+                $"AtEaseAutoTriggerOutOfCombatOnly: {Configuration.AtEaseAutoTriggerOutOfCombatOnly}, currently in combat: {inCombatNow}, suppressed by this: {combatSuppressed}\n" +
                 $"All conditions met (fires once per second while true, not a one-time trigger): {wouldTrigger}\n" +
                 $"Seconds until next fire (if conditions stay met): {secondsUntilNextFire:F1}");
             return;
@@ -1267,7 +1267,7 @@ public sealed class Plugin : IDalamudPlugin
 
         // Scaling Paused, per a later request, no longer an early return
         // here at all - it used to cover everything below (passive
-        // growth, ability-use/damage-taken/jump/dazed/guard mechanics,
+        // growth, ability-use/damage-taken/jump/dazed/atEase mechanics,
         // the ease-toward-target animation, AND the Customize+ push
         // itself), but that meant even a manual command
         // (/milk <number>, /food <number>, etc.) writing directly to
@@ -1668,18 +1668,18 @@ public sealed class Plugin : IDalamudPlugin
         // specifically so you can "check the gauge's status" without
         // needing to use an ability or take damage first. Cheap enough
         // to call every frame it's active, no throttling needed.
-        if (Configuration.AttentionWakeEnabled && emoteLoopTracker.IsAttentionActive(Configuration))
+        if (Configuration.AttentionWakeEnabled && emoteLoopTracker.IsAttentionActive())
             hudGauge.WakeFromIdle();
 
-        // /guard (used in place of /guard) - mirrors the /attention
+        // /atEase (used in place of /atEase) - mirrors the /attention
         // wake-check exactly, whether it's currently active because
         // the auto-trigger forced it or because it's being performed
         // manually.
-        if (Configuration.GuardWakeEnabled && emoteLoopTracker.IsGuardActive(Configuration))
+        if (Configuration.AtEaseWakeEnabled && emoteLoopTracker.IsAtEaseActive())
             hudGauge.WakeFromIdle();
 
         // Scale-threshold wake: same cheap every-frame WakeFromIdle()
-        // pattern as /attention and /guard above, just driven by the
+        // pattern as /attention and /atEase above, just driven by the
         // applied scale value crossing a configured threshold instead
         // of an emote. Continuously re-wakes for as long as scale
         // stays at or above HudShowAboveScaleThreshold, so the gauge
@@ -1724,7 +1724,7 @@ public sealed class Plugin : IDalamudPlugin
         // dazedAtOrBelowFloorLastCheck resets every time /dazed stops
         // being active).
         {
-            var dazedActiveForThreshold = Configuration.DazedDrainBoostEnabled && emoteLoopTracker.IsDazedActive(Configuration);
+            var dazedActiveForThreshold = Configuration.DazedDrainBoostEnabled && emoteLoopTracker.IsDazedActive();
             var atOrBelowFloor = jobCurrentScale <= Configuration.DazedDrainFloorScale;
 
             if (dazedActiveForThreshold && atOrBelowFloor)
@@ -1770,7 +1770,7 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        // Guard auto-trigger: forces "/guard motion" once every second
+        // AtEase auto-trigger: forces "/atease motion" once every second
         // for as long as scale is at/above threshold AND the player is
         // standing still - no longer requires any OTHER emote to
         // already be playing (that requirement was removed per
@@ -1782,7 +1782,7 @@ public sealed class Plugin : IDalamudPlugin
         // conditions) while the player is Charmed or performing Ball
         // Dance, so it doesn't interrupt either of those. Per a further
         // request, mirroring the heartbeat sound's own toggle,
-        // GuardAutoTriggerOutOfCombatOnly can additionally restrict
+        // AtEaseAutoTriggerOutOfCombatOnly can additionally restrict
         // this to OUT of combat only - it stays fully suppressed while
         // actually in combat, regardless of every other condition
         // above, once turned on.
@@ -1802,30 +1802,30 @@ public sealed class Plugin : IDalamudPlugin
             var isStandingStill = lastPlayerMovementTime >= 0d
                 && ImGuiNowSeconds() - lastPlayerMovementTime >= PositionStillnessRequiredSeconds;
 
-            var scaleAtOrAboveGuardThreshold = jobCurrentScale >= Configuration.GuardThresholdScale;
+            var scaleAtOrAboveAtEaseThreshold = jobCurrentScale >= Configuration.AtEaseThresholdScale;
 
-            var guardSuppressed = emoteLoopTracker.IsCharmedActive(Configuration)
-                || emoteLoopTracker.IsBallDanceActive(Configuration);
+            var atEaseSuppressed = emoteLoopTracker.IsCharmedActive()
+                || emoteLoopTracker.IsBallDanceActive();
 
-            var shouldGuard = Configuration.GuardAutoTriggerEnabled
-                && scaleAtOrAboveGuardThreshold
+            var shouldAtEase = Configuration.AtEaseAutoTriggerEnabled
+                && scaleAtOrAboveAtEaseThreshold
                 && isStandingStill
-                && !guardSuppressed
-                && !(Configuration.GuardAutoTriggerOutOfCombatOnly && Condition[ConditionFlag.InCombat]);
+                && !atEaseSuppressed
+                && !(Configuration.AtEaseAutoTriggerOutOfCombatOnly && Condition[ConditionFlag.InCombat]);
 
-            if (shouldGuard)
+            if (shouldAtEase)
             {
-                var guardCheckNow = ImGuiNowSeconds();
-                if (guardCheckNow - lastGuardTriggerTime >= GuardTriggerIntervalSeconds)
+                var atEaseCheckNow = ImGuiNowSeconds();
+                if (atEaseCheckNow - lastAtEaseTriggerTime >= AtEaseTriggerIntervalSeconds)
                 {
-                    lastGuardTriggerTime = guardCheckNow;
+                    lastAtEaseTriggerTime = atEaseCheckNow;
                     try
                     {
-                        GameCommandSender.SendCommand("/guard motion");
+                        GameCommandSender.SendCommand("/atease motion");
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "[MilkMeter] Guard auto-trigger failed - see GameCommandSender's doc comment.");
+                        Log.Error(ex, "[MilkMeter] At-Ease auto-trigger failed - see GameCommandSender's doc comment.");
                     }
                 }
             }
@@ -1977,9 +1977,9 @@ public sealed class Plugin : IDalamudPlugin
                 // emote/passive state would otherwise apply, same
                 // "highest priority wins outright" reasoning as dazed
                 // being checked before water below.
-                var dazedDrainActive = Configuration.DazedDrainBoostEnabled && emoteLoopTracker.IsDazedActive(Configuration);
-                var waterDrainActive = Configuration.WaterDrainBoostEnabled && emoteLoopTracker.IsWaterActive(Configuration);
-                var shakeDrinkActive = Configuration.ShakeDrinkBoostEnabled && emoteLoopTracker.IsShakeDrinkActive(Configuration);
+                var dazedDrainActive = Configuration.DazedDrainBoostEnabled && emoteLoopTracker.IsDazedActive();
+                var waterDrainActive = Configuration.WaterDrainBoostEnabled && emoteLoopTracker.IsWaterActive();
+                var shakeDrinkActive = Configuration.ShakeDrinkBoostEnabled && emoteLoopTracker.IsShakeDrinkActive();
 
                 if (moanRampActive)
                 {
@@ -2205,7 +2205,7 @@ public sealed class Plugin : IDalamudPlugin
         // Mini-Game, which just reads back whatever jobCurrentScale
         // currently is (itself already frozen by the block above, except
         // for direct manual-command writes, which is exactly what we
-        // still want reflected). Left unguarded, PvP mode would keep
+        // still want reflected). Left unatEaseed, PvP mode would keep
         // tracking your real MP the whole time "paused," which isn't a
         // freeze at all - so while paused AND in a PvP match, reuse the
         // last applied value as the target (diff against itself = 0, so
