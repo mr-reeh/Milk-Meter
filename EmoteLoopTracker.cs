@@ -71,8 +71,7 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
     public const byte ShakeDrinkModeParam = 76;   // Breast Massage
     public const byte DazedModeParam = 79;        // Self Sucking Drain
     public const byte WaterModeParam = 75;        // Breast Feeding Drain
-    public const byte AttentionModeParam = 29;    // wakes the HUD gauge
-    public const byte AtEaseModeParam = 30;       // At-Ease auto-trigger
+    public const byte AttentionModeParam = 29;    // wakes the HUD gauge AND the auto-trigger
     public const byte CharmedModeParam = 33;      // suppresses the auto-trigger
     public const byte BallDanceModeParam = 6;     // suppresses the auto-trigger
 
@@ -85,22 +84,19 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
     /// <summary>True while the /water ("Breast Feeding Drain") looping emote is active - a second independent drain-toward-a-floor mechanic alongside /dazed.</summary>
     public bool IsWaterActive() => IsMatchingEmoteActive(WaterModeParam);
 
-    /// <summary>True while /attention is active - used to wake the HUD gauge from its idle fade rather than affect the scale itself.</summary>
+    /// <summary>True while /attention is active - whether performed manually (to wake the HUD gauge from its idle fade) or forced by Plugin.cs's Attention auto-trigger. Both uses share this one emote now, so a single check serves both.</summary>
     public bool IsAttentionActive() => IsMatchingEmoteActive(AttentionModeParam);
 
-    /// <summary>True while /atease is active - forced by Plugin.cs's At-Ease auto-trigger rather than affecting the scale itself.</summary>
-    public bool IsAtEaseActive() => IsMatchingEmoteActive(AtEaseModeParam);
-
-    /// <summary>True while the "Charmed" crowd-control status is active - used by Plugin.cs to suppress the At-Ease auto-trigger so it doesn't interrupt it.</summary>
+    /// <summary>True while the "Charmed" crowd-control status is active - used by Plugin.cs to suppress the Attention auto-trigger so it doesn't interrupt it.</summary>
     public bool IsCharmedActive() => IsMatchingEmoteActive(CharmedModeParam);
 
-    /// <summary>True while the "Ball Dance" emote/animation is active - used by Plugin.cs to suppress the At-Ease auto-trigger so it doesn't interrupt it.</summary>
+    /// <summary>True while the "Ball Dance" emote/animation is active - used by Plugin.cs to suppress the Attention auto-trigger so it doesn't interrupt it.</summary>
     public bool IsBallDanceActive() => IsMatchingEmoteActive(BallDanceModeParam);
 
     /// <summary>
     /// True while SOME looping emote is active that is NOT one of the
-    /// five specifically tracked ones (shakedrink, dazed, water,
-    /// attention, atease). Originally used by Plugin.cs's At-Ease
+    /// four specifically tracked ones (shakedrink, dazed, water,
+    /// attention). Originally used by Plugin.cs's Attention
     /// auto-trigger as one of its firing conditions, but that
     /// requirement was removed per request - the trigger no longer
     /// checks this at all. Kept purely as diagnostic info in
@@ -121,8 +117,7 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
         return modeParam != ShakeDrinkModeParam
             && modeParam != DazedModeParam
             && modeParam != WaterModeParam
-            && modeParam != AttentionModeParam
-            && modeParam != AtEaseModeParam;
+            && modeParam != AttentionModeParam;
     }
 
     private bool IsMatchingEmoteActive(int configuredModeParam)
@@ -142,9 +137,8 @@ public sealed class EmoteLoopTracker(IObjectTable objectTable)
             $"Dazed (fixed {DazedModeParam}), currently active: {IsDazedActive()}\n" +
             $"Water (fixed {WaterModeParam}), currently active: {IsWaterActive()}\n" +
             $"Attention (fixed {AttentionModeParam}), currently active: {IsAttentionActive()}\n" +
-            $"At-Ease (fixed {AtEaseModeParam}), currently active: {IsAtEaseActive()}\n" +
-            $"Charmed (fixed {CharmedModeParam}), currently active: {IsCharmedActive()} (suppresses the At-Ease auto-trigger while active)\n" +
-            $"Ball Dance (fixed {BallDanceModeParam}), currently active: {IsBallDanceActive()} (suppresses the At-Ease auto-trigger while active)\n" +
+            $"Charmed (fixed {CharmedModeParam}), currently active: {IsCharmedActive()} (suppresses the Attention auto-trigger while active)\n" +
+            $"Ball Dance (fixed {BallDanceModeParam}), currently active: {IsBallDanceActive()} (suppresses the Attention auto-trigger while active)\n" +
             $"Some OTHER (untracked) looping emote active: {IsOtherLoopingEmoteActive()}";
     }
 }

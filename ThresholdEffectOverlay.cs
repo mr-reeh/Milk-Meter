@@ -88,6 +88,22 @@ public sealed class ThresholdEffectOverlay(Configuration configuration, Heartbea
             return;
         }
 
+        // Out-of-combat-only restriction, per request - mirrors the
+        // heartbeat's own ThresholdEffectHeartbeatOutOfCombatOnly, but
+        // scoped to the WHOLE effect (vignette, glow, and both sounds)
+        // rather than just one sound. Uses the same hard-stop shape as
+        // the pause case above rather than a gradual fade: entering
+        // combat should clear the screen immediately, not leave a red
+        // border fading out over the first second of a fight.
+        if (configuration.ThresholdEffectOutOfCombatOnly && inCombat)
+        {
+            heartbeatSoundPlayer.Stop();
+            moanSoundPlayer.Stop();
+            currentAlpha = 0f;
+            lastUpdateTime = NowSeconds();
+            return;
+        }
+
         var now = NowSeconds();
         var delta = lastUpdateTime < 0d ? 0f : (float)(now - lastUpdateTime);
         lastUpdateTime = now;

@@ -472,45 +472,39 @@ public sealed class SettingsWindow(
                 "doesn't touch the scale itself at all, purely a way to check the gauge's current status " +
                 "without needing to use an ability or take damage first.");
 
-            var atEaseEnabled = configuration.AtEaseAutoTriggerEnabled;
-            if (ImGui.Checkbox("At-Ease Auto-Trigger", ref atEaseEnabled))
+            var attentionAutoTrigger = configuration.AttentionAutoTriggerEnabled;
+            if (ImGui.Checkbox("Attention Auto-Trigger", ref attentionAutoTrigger))
             {
-                configuration.AtEaseAutoTriggerEnabled = atEaseEnabled;
+                configuration.AttentionAutoTriggerEnabled = attentionAutoTrigger;
                 configuration.Save();
             }
 
-            var atEaseOutOfCombatOnly = configuration.AtEaseAutoTriggerOutOfCombatOnly;
-            if (ImGui.Checkbox("Auto-Trigger Only Outside Combat", ref atEaseOutOfCombatOnly))
+            var attentionOutOfCombatOnly = configuration.AttentionAutoTriggerOutOfCombatOnly;
+            if (ImGui.Checkbox("Auto-Trigger Only Outside Combat", ref attentionOutOfCombatOnly))
             {
-                configuration.AtEaseAutoTriggerOutOfCombatOnly = atEaseOutOfCombatOnly;
+                configuration.AttentionAutoTriggerOutOfCombatOnly = attentionOutOfCombatOnly;
                 configuration.Save();
             }
             ImGui.TextDisabled("When on, the auto-trigger above stays fully suppressed while actually " +
                 "in combat, regardless of threshold/standing-still/Charmed/Ball Dance - it only fires " +
                 "once you're out of combat. Off by default.");
 
-            var atEaseThreshold = configuration.AtEaseThresholdScale;
-            if (ImGui.SliderFloat("At-Ease Threshold", ref atEaseThreshold, 0.10f, 3.00f, "%.2f"))
+            var attentionThreshold = configuration.AttentionThresholdScale;
+            if (ImGui.SliderFloat("Attention Threshold", ref attentionThreshold, 0.10f, 3.00f, "%.2f"))
             {
-                configuration.AtEaseThresholdScale = atEaseThreshold;
+                configuration.AttentionThresholdScale = attentionThreshold;
                 configuration.Save();
             }
 
-            ImGui.TextDisabled("Forces \"/atease motion\" once per second for as long as scale is at or " +
+            ImGui.TextDisabled("Forces \"/attention motion\" once per second for as long as scale is at or " +
                 "above the threshold above AND you're standing still - both at once, repeating on its " +
                 "own rather than firing just once.");
 
-            var atEaseWakeEnabled = configuration.AtEaseWakeEnabled;
-            if (ImGui.Checkbox("At-Ease Wakes HUD Gauge", ref atEaseWakeEnabled))
-            {
-                configuration.AtEaseWakeEnabled = atEaseWakeEnabled;
-                configuration.Save();
-            }
-            ImGui.TextDisabled("While /atEase is active (whether forced above or performed manually), " +
+            ImGui.TextDisabled("While /attention is active (whether forced above or performed manually), " +
                 "wakes the HUD gauge from its idle fade - same as Check Breasts (/attention) does.");
 
 
-            ImGui.TextDisabled("The At-Ease Auto-Trigger above is suppressed entirely while either of these " +
+            ImGui.TextDisabled("The Attention Auto-Trigger above is suppressed entirely while either of these " +
                 "is active, so it doesn't interrupt them. Defaults: Charmed = 33, Ball Dance = 6.");
 
             ImGui.TextDisabled("Ability Multipliers (Base Reduction x Multiplier = Amount Subtracted Per Use - " +
@@ -722,6 +716,17 @@ public sealed class SettingsWindow(
             "whose intensity ramps continuously between the two scale values below - 0% at the start, " +
             "100% at the end. Purely cosmetic - drawn " +
             "on top of the game frame, never touches input, movement, or anything mechanical.");
+
+        var thresholdOutOfCombatOnly = configuration.ThresholdEffectOutOfCombatOnly;
+        if (ImGui.Checkbox("Threshold Effect Only Outside Combat", ref thresholdOutOfCombatOnly))
+        {
+            configuration.ThresholdEffectOutOfCombatOnly = thresholdOutOfCombatOnly;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("When on, the whole effect - vignette, glow, and both sounds - is suppressed " +
+            "while actually in combat, and only plays out of combat. Clears instantly on entering " +
+            "combat rather than fading out. Broader than the heartbeat-only version further below; if " +
+            "both are on, this one covers the heartbeat too. Off by default.");
 
         var thresholdEffectRampStart = configuration.ThresholdEffectRampStartScale;
         if (ImGui.SliderFloat("Threshold Effect Ramp Start", ref thresholdEffectRampStart, 0.10f, 3.00f, "%.2f"))

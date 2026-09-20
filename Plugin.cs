@@ -289,7 +289,7 @@ public sealed class Plugin : IDalamudPlugin
     // immediately following, with isJumping never having gone false -
     // still counts as its own jump. lastPlayerY is this block's own
     // dedicated position-tracking field, deliberately separate from the
-    // AtEase trigger's lastPlayerPosition further below, since that one
+    // Attention trigger's lastPlayerPosition further below, since that one
     // isn't guaranteed to be updated yet by the point this block runs
     // each tick. The velocity threshold itself is
     // Configuration.JumpVelocityThreshold - a GUESSED starting value,
@@ -317,7 +317,7 @@ public sealed class Plugin : IDalamudPlugin
     // threshold state at playback time.
     private double? pendingBurpPlayTime;
 
-    // Periodic re-trigger timer for the atEase auto-trigger (once per
+    // Periodic re-trigger timer for the attention auto-trigger (once per
     // second, matching DazedBurstIntervalSeconds's own established
     // pattern below) - -1 sentinel means "never fired yet", so the very
     // first tick where conditions are met fires immediately rather than
@@ -325,10 +325,10 @@ public sealed class Plugin : IDalamudPlugin
     // earlier version fired once and waited for conditions to reset) -
     // this now keeps re-forcing the emote once per second for as long
     // as both conditions hold, per request.
-    private const double AtEaseTriggerIntervalSeconds = 1.0;
-    private double lastAtEaseTriggerTime = -1d;
+    private const double AttentionTriggerIntervalSeconds = 1.0;
+    private double lastAttentionTriggerTime = -1d;
 
-    // Frame-to-frame position tracking for the atEase auto-trigger's
+    // Frame-to-frame position tracking for the attention auto-trigger's
     // "standing still" condition - a new kind of check for this
     // project, but built on ObjectTable.LocalPlayer.Position, an
     // extremely standard, fundamental Dalamud game-object property
@@ -476,7 +476,7 @@ public sealed class Plugin : IDalamudPlugin
                 + "'emotedebug' prints your current Character.Mode/ModeParam alongside every emote this "
                 + "plugin watches and whether each is currently active - these values are fixed constants "
                 + "now rather than settings, so this is purely diagnostic. "
-                + "'ateasedebug' breaks down the At-Ease auto-trigger's two conditions "
+                + "'attentiondebug' breaks down the Attention auto-trigger's two conditions "
                 + "(scale threshold, standing-still) separately, plus when it'll next fire. "
                 + "'gcddebug' shows the configured GCD recast group's live cooldown state - use it "
                 + "while pressing different GCD spells/weaponskills to confirm or correct "
@@ -823,28 +823,28 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        if (args.Equals("ateasedebug", System.StringComparison.OrdinalIgnoreCase))
+        if (args.Equals("attentiondebug", System.StringComparison.OrdinalIgnoreCase))
         {
-            var scaleAtOrAbove = jobCurrentScale >= Configuration.AtEaseThresholdScale;
+            var scaleAtOrAbove = jobCurrentScale >= Configuration.AttentionThresholdScale;
             var secondsSinceMovement = lastPlayerMovementTime >= 0d ? ImGuiNowSeconds() - lastPlayerMovementTime : (double?)null;
             var standingStill = lastPlayerMovementTime >= 0d && secondsSinceMovement >= PositionStillnessRequiredSeconds;
             var charmedActive = emoteLoopTracker.IsCharmedActive();
             var ballDanceActive = emoteLoopTracker.IsBallDanceActive();
-            var atEaseSuppressed = charmedActive || ballDanceActive;
+            var attentionSuppressed = charmedActive || ballDanceActive;
             var inCombatNow = Condition[ConditionFlag.InCombat];
-            var combatSuppressed = Configuration.AtEaseAutoTriggerOutOfCombatOnly && inCombatNow;
-            var wouldTrigger = Configuration.AtEaseAutoTriggerEnabled && scaleAtOrAbove && standingStill && !atEaseSuppressed && !combatSuppressed;
-            var secondsUntilNextFire = lastAtEaseTriggerTime < 0d
+            var combatSuppressed = Configuration.AttentionAutoTriggerOutOfCombatOnly && inCombatNow;
+            var wouldTrigger = Configuration.AttentionAutoTriggerEnabled && scaleAtOrAbove && standingStill && !attentionSuppressed && !combatSuppressed;
+            var secondsUntilNextFire = lastAttentionTriggerTime < 0d
                 ? 0d
-                : System.Math.Max(0d, AtEaseTriggerIntervalSeconds - (ImGuiNowSeconds() - lastAtEaseTriggerTime));
+                : System.Math.Max(0d, AttentionTriggerIntervalSeconds - (ImGuiNowSeconds() - lastAttentionTriggerTime));
 
-            Log.Information("[MilkMeter] At-Ease auto-trigger debug info:\n" +
-                $"AtEaseAutoTriggerEnabled: {Configuration.AtEaseAutoTriggerEnabled}\n" +
-                $"Current job scale: {jobCurrentScale:F3}, AtEaseThresholdScale: {Configuration.AtEaseThresholdScale:F3}, at or above threshold: {scaleAtOrAbove}\n" +
+            Log.Information("[MilkMeter] Attention auto-trigger debug info:\n" +
+                $"AttentionAutoTriggerEnabled: {Configuration.AttentionAutoTriggerEnabled}\n" +
+                $"Current job scale: {jobCurrentScale:F3}, AttentionThresholdScale: {Configuration.AttentionThresholdScale:F3}, at or above threshold: {scaleAtOrAbove}\n" +
                 $"Seconds since last movement: {(secondsSinceMovement.HasValue ? secondsSinceMovement.Value.ToString("F2") : "never moved yet")}, " +
                 $"required: {PositionStillnessRequiredSeconds:F1}, standing still: {standingStill}\n" +
                 $"Charmed active: {charmedActive}, Ball Dance active: {ballDanceActive} (either one suppresses the trigger entirely)\n" +
-                $"AtEaseAutoTriggerOutOfCombatOnly: {Configuration.AtEaseAutoTriggerOutOfCombatOnly}, currently in combat: {inCombatNow}, suppressed by this: {combatSuppressed}\n" +
+                $"AttentionAutoTriggerOutOfCombatOnly: {Configuration.AttentionAutoTriggerOutOfCombatOnly}, currently in combat: {inCombatNow}, suppressed by this: {combatSuppressed}\n" +
                 $"All conditions met (fires once per second while true, not a one-time trigger): {wouldTrigger}\n" +
                 $"Seconds until next fire (if conditions stay met): {secondsUntilNextFire:F1}");
             return;
@@ -1267,7 +1267,7 @@ public sealed class Plugin : IDalamudPlugin
 
         // Scaling Paused, per a later request, no longer an early return
         // here at all - it used to cover everything below (passive
-        // growth, ability-use/damage-taken/jump/dazed/atEase mechanics,
+        // growth, ability-use/damage-taken/jump/dazed/attention mechanics,
         // the ease-toward-target animation, AND the Customize+ push
         // itself), but that meant even a manual command
         // (/milk <number>, /food <number>, etc.) writing directly to
@@ -1668,18 +1668,17 @@ public sealed class Plugin : IDalamudPlugin
         // specifically so you can "check the gauge's status" without
         // needing to use an ability or take damage first. Cheap enough
         // to call every frame it's active, no throttling needed.
+        // Covers BOTH the manual case and the auto-trigger, now that the
+        // auto-trigger forces /attention itself rather than a separate
+        // emote - there used to be a second, near-identical wake check
+        // here for that, which became exactly redundant with this one
+        // once both keyed off the same emote, so it was removed rather
+        // than left as two toggles that silently did the same thing.
         if (Configuration.AttentionWakeEnabled && emoteLoopTracker.IsAttentionActive())
             hudGauge.WakeFromIdle();
 
-        // /atEase (used in place of /atEase) - mirrors the /attention
-        // wake-check exactly, whether it's currently active because
-        // the auto-trigger forced it or because it's being performed
-        // manually.
-        if (Configuration.AtEaseWakeEnabled && emoteLoopTracker.IsAtEaseActive())
-            hudGauge.WakeFromIdle();
-
         // Scale-threshold wake: same cheap every-frame WakeFromIdle()
-        // pattern as /attention and /atEase above, just driven by the
+        // pattern as /attention and /attention above, just driven by the
         // applied scale value crossing a configured threshold instead
         // of an emote. Continuously re-wakes for as long as scale
         // stays at or above HudShowAboveScaleThreshold, so the gauge
@@ -1770,7 +1769,7 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        // AtEase auto-trigger: forces "/atease motion" once every second
+        // Attention auto-trigger: forces "/attention motion" once every second
         // for as long as scale is at/above threshold AND the player is
         // standing still - no longer requires any OTHER emote to
         // already be playing (that requirement was removed per
@@ -1782,7 +1781,7 @@ public sealed class Plugin : IDalamudPlugin
         // conditions) while the player is Charmed or performing Ball
         // Dance, so it doesn't interrupt either of those. Per a further
         // request, mirroring the heartbeat sound's own toggle,
-        // AtEaseAutoTriggerOutOfCombatOnly can additionally restrict
+        // AttentionAutoTriggerOutOfCombatOnly can additionally restrict
         // this to OUT of combat only - it stays fully suppressed while
         // actually in combat, regardless of every other condition
         // above, once turned on.
@@ -1802,30 +1801,30 @@ public sealed class Plugin : IDalamudPlugin
             var isStandingStill = lastPlayerMovementTime >= 0d
                 && ImGuiNowSeconds() - lastPlayerMovementTime >= PositionStillnessRequiredSeconds;
 
-            var scaleAtOrAboveAtEaseThreshold = jobCurrentScale >= Configuration.AtEaseThresholdScale;
+            var scaleAtOrAboveAttentionThreshold = jobCurrentScale >= Configuration.AttentionThresholdScale;
 
-            var atEaseSuppressed = emoteLoopTracker.IsCharmedActive()
+            var attentionSuppressed = emoteLoopTracker.IsCharmedActive()
                 || emoteLoopTracker.IsBallDanceActive();
 
-            var shouldAtEase = Configuration.AtEaseAutoTriggerEnabled
-                && scaleAtOrAboveAtEaseThreshold
+            var shouldAttention = Configuration.AttentionAutoTriggerEnabled
+                && scaleAtOrAboveAttentionThreshold
                 && isStandingStill
-                && !atEaseSuppressed
-                && !(Configuration.AtEaseAutoTriggerOutOfCombatOnly && Condition[ConditionFlag.InCombat]);
+                && !attentionSuppressed
+                && !(Configuration.AttentionAutoTriggerOutOfCombatOnly && Condition[ConditionFlag.InCombat]);
 
-            if (shouldAtEase)
+            if (shouldAttention)
             {
-                var atEaseCheckNow = ImGuiNowSeconds();
-                if (atEaseCheckNow - lastAtEaseTriggerTime >= AtEaseTriggerIntervalSeconds)
+                var attentionCheckNow = ImGuiNowSeconds();
+                if (attentionCheckNow - lastAttentionTriggerTime >= AttentionTriggerIntervalSeconds)
                 {
-                    lastAtEaseTriggerTime = atEaseCheckNow;
+                    lastAttentionTriggerTime = attentionCheckNow;
                     try
                     {
-                        GameCommandSender.SendCommand("/atease motion");
+                        GameCommandSender.SendCommand("/attention motion");
                     }
                     catch (Exception ex)
                     {
-                        Log.Error(ex, "[MilkMeter] At-Ease auto-trigger failed - see GameCommandSender's doc comment.");
+                        Log.Error(ex, "[MilkMeter] Attention auto-trigger failed - see GameCommandSender's doc comment.");
                     }
                 }
             }
@@ -2205,7 +2204,7 @@ public sealed class Plugin : IDalamudPlugin
         // Mini-Game, which just reads back whatever jobCurrentScale
         // currently is (itself already frozen by the block above, except
         // for direct manual-command writes, which is exactly what we
-        // still want reflected). Left unatEaseed, PvP mode would keep
+        // still want reflected). Left unattentioned, PvP mode would keep
         // tracking your real MP the whole time "paused," which isn't a
         // freeze at all - so while paused AND in a PvP match, reuse the
         // last applied value as the target (diff against itself = 0, so

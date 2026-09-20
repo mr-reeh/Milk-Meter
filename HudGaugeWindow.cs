@@ -223,7 +223,7 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
     /// Trigger() itself, and separately by Plugin.cs for events that
     /// should count as "activity" without necessarily firing a particle
     /// burst (the increase-variant events, active shakedrink-boosted
-    /// growth, the dedicated /attention/atEase emotes, and - if
+    /// growth, the dedicated /attention/attention emotes, and - if
     /// HudShowAboveScaleEnabled is on - the applied scale being at or
     /// above HudShowAboveScaleThreshold).
     /// </summary>
@@ -469,7 +469,8 @@ public sealed class HudGaugeWindow(Configuration configuration, Func<float> getA
         // Configuration.ScalingPaused is true, per request - the glow
         // would otherwise keep evaluating against whatever frozen
         // scale value was applied at the moment of pausing. ---
-        if (!configuration.ScalingPaused && configuration.ThresholdEffectEnabled && configuration.ThresholdEffectGlowEnabled)
+        if (!configuration.ScalingPaused && configuration.ThresholdEffectEnabled && configuration.ThresholdEffectGlowEnabled
+            && !(configuration.ThresholdEffectOutOfCombatOnly && getInCombat()))
         {
             var rampStart = configuration.ThresholdEffectRampStartScale;
             var rampEnd = configuration.ThresholdEffectRampEndScale;

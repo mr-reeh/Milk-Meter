@@ -42,7 +42,7 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>
     /// If true, every AUTOMATIC mechanic that would modify or push the
     /// applied chest scale is skipped - passive growth, ability-use,
-    /// damage-taken, jumping, /dazed/atEase, death-reset. MANUAL commands
+    /// damage-taken, jumping, /dazed/attention, death-reset. MANUAL commands
     /// (/milk &lt;number&gt;, /milk minimum/maximum/moan) are a deliberate
     /// exception, per request - they still take effect and become
     /// visible even while paused (see OnFrameworkUpdate's own comment on
@@ -492,10 +492,10 @@ public sealed class Configuration : IPluginConfiguration
 
 
     /// <summary>
-    /// If true, forces "/atEase motion" once per second (see
-    /// AtEaseTriggerIntervalSeconds in Plugin.cs) for as long as BOTH of
+    /// If true, forces "/attention motion" once per second (see
+    /// AttentionTriggerIntervalSeconds in Plugin.cs) for as long as BOTH of
     /// the following hold simultaneously: the applied scale is at or
-    /// above AtEaseThresholdScale, and the player is standing still
+    /// above AttentionThresholdScale, and the player is standing still
     /// (position hasn't meaningfully changed for a short window - see
     /// Plugin.cs). Unlike the Self Sucking Threshold's rising-edge
     /// pattern (fire once, wait for conditions to reset), this keeps
@@ -509,30 +509,23 @@ public sealed class Configuration : IPluginConfiguration
     /// (BallDanceModeParam), so it doesn't interrupt either of
     /// those. On by default.
     /// </summary>
-    public bool AtEaseAutoTriggerEnabled { get; set; } = true;
+    public bool AttentionAutoTriggerEnabled { get; set; } = true;
 
     /// <summary>
     /// If true, mirroring ThresholdEffectHeartbeatOutOfCombatOnly's own
-    /// toggle, the atEase auto-trigger above is additionally restricted
+    /// toggle, the attention auto-trigger above is additionally restricted
     /// to OUT of combat only - it stays fully suppressed while actually
     /// in combat, regardless of every other condition (threshold,
     /// standing-still, Charmed/Ball Dance). Off by default, so the
     /// auto-trigger fires regardless of combat state unless this is
     /// explicitly turned on.
     /// </summary>
-    public bool AtEaseAutoTriggerOutOfCombatOnly { get; set; } = false;
+    public bool AttentionAutoTriggerOutOfCombatOnly { get; set; } = false;
 
-    /// <summary>The applied-scale value that must be reached or exceeded for the atEase auto-trigger to fire. 1.20 by default.</summary>
-    public float AtEaseThresholdScale { get; set; } = 1.3f;
+    /// <summary>The applied-scale value that must be reached or exceeded for the attention auto-trigger to fire. 1.20 by default.</summary>
+    public float AttentionThresholdScale { get; set; } = 1.3f;
 
 
-    /// <summary>
-    /// If true, while /atEase is active (whether forced by the
-    /// auto-trigger above or performed manually), wakes the HUD gauge
-    /// from its idle fade - mirrors AttentionWakeEnabled's exact
-    /// pattern for /attention. On by default.
-    /// </summary>
-    public bool AtEaseWakeEnabled { get; set; } = true;
 
 
 
@@ -993,7 +986,7 @@ public sealed class Configuration : IPluginConfiguration
     /// its idle fade - same WakeFromIdle() mechanism as an ability use
     /// or the /attention emote, just driven by the scale value itself
     /// instead of a discrete event. Checked every frame in Plugin.cs
-    /// alongside the /attention and /atEase wake-checks, so as long as
+    /// alongside the /attention and /attention wake-checks, so as long as
     /// scale stays at or above the threshold the gauge stays visible
     /// (or fades back in if it had already faded); once scale drops
     /// back below, the normal idle timer resumes counting down from
@@ -1003,7 +996,7 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool HudShowAboveScaleEnabled { get; set; } = false;
 
-    /// <summary>The applied-scale value at or above which HudShowAboveScaleEnabled keeps the HUD gauge awake. Independent of every other scale threshold in this file (AtEase, threshold-effect ramp, etc.) - purely for HUD visibility. 1.20 by default.</summary>
+    /// <summary>The applied-scale value at or above which HudShowAboveScaleEnabled keeps the HUD gauge awake. Independent of every other scale threshold in this file (Attention, threshold-effect ramp, etc.) - purely for HUD visibility. 1.20 by default.</summary>
     public float HudShowAboveScaleThreshold { get; set; } = 1.20f;
 
     /// <summary>
@@ -1027,6 +1020,20 @@ public sealed class Configuration : IPluginConfiguration
     /// input, movement, or anything mechanical. Off by default.
     /// </summary>
     public bool ThresholdEffectEnabled { get; set; } = true;
+
+    /// <summary>
+    /// If true, the ENTIRE threshold effect - vignette, glow, and both
+    /// the heartbeat and moan sounds - is suppressed while actually in
+    /// combat, playing only out of combat. Per request; broader in
+    /// scope than ThresholdEffectHeartbeatOutOfCombatOnly further below,
+    /// which restricts only the heartbeat sound. If both are on, this
+    /// one wins for the heartbeat too, simply by suppressing everything
+    /// before that check is ever reached. Implemented as an instant
+    /// hard stop rather than a gradual fade, so entering combat clears
+    /// the screen immediately instead of leaving a red border fading out
+    /// over the first second of a fight. Off by default.
+    /// </summary>
+    public bool ThresholdEffectOutOfCombatOnly { get; set; } = false;
 
     /// <summary>The applied-scale value at which the threshold effect's intensity ramp begins (0% intensity). 1.15 by default.</summary>
     public float ThresholdEffectRampStartScale { get; set; } = 1.15f;
