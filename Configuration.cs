@@ -1035,6 +1035,16 @@ public sealed class Configuration : IPluginConfiguration
     /// </summary>
     public bool ThresholdEffectOutOfCombatOnly { get; set; } = false;
 
+    /// <summary>
+    /// If true, the threshold effect's SOUNDS (heartbeat and moan) are
+    /// silenced while dead - per request, in both normal content and
+    /// PvP, since it keys off ConditionFlag.Unconscious rather than
+    /// anything PvP-specific. Deliberately scoped to the sounds only:
+    /// the vignette and glow keep rendering, since a death doesn't
+    /// otherwise change what the scale is. Off by default.
+    /// </summary>
+    public bool ThresholdEffectSilenceSoundsWhenDead { get; set; } = false;
+
     /// <summary>The applied-scale value at which the threshold effect's intensity ramp begins (0% intensity). 1.15 by default.</summary>
     public float ThresholdEffectRampStartScale { get; set; } = 1.15f;
 

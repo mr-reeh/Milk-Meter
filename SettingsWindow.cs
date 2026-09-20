@@ -732,6 +732,16 @@ public sealed class SettingsWindow(
             "combat rather than fading out. Broader than the heartbeat-only version further below; if " +
             "both are on, this one covers the heartbeat too. Off by default.");
 
+        var silenceSoundsWhenDead = configuration.ThresholdEffectSilenceSoundsWhenDead;
+        if (ImGui.Checkbox("Silence Threshold Sounds When Dead", ref silenceSoundsWhenDead))
+        {
+            configuration.ThresholdEffectSilenceSoundsWhenDead = silenceSoundsWhenDead;
+            configuration.Save();
+        }
+        ImGui.TextDisabled("Stops the heartbeat and moan sounds while you're dead, in both normal " +
+            "content and PvP. The vignette and glow keep showing - this only affects audio. Off by " +
+            "default.");
+
         var thresholdEffectRampStart = configuration.ThresholdEffectRampStartScale;
         if (ImGui.SliderFloat("Threshold Effect Ramp Start", ref thresholdEffectRampStart, 0.10f, 3.00f, "%.2f"))
         {

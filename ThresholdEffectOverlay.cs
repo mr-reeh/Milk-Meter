@@ -69,7 +69,7 @@ public sealed class ThresholdEffectOverlay(Configuration configuration, Heartbea
     private float currentAlpha;
     private double lastUpdateTime = -1d;
 
-    public void Draw(float currentValue, bool inCombat)
+    public void Draw(float currentValue, bool inCombat, bool isDead)
     {
         // Completely stops while Configuration.ScalingPaused is true,
         // per request - an instant hard stop (currentAlpha snapped
@@ -134,8 +134,18 @@ public sealed class ThresholdEffectOverlay(Configuration configuration, Heartbea
         // other - each has its own separately configurable threshold,
         // no volume control (SoundPlayer doesn't have one, and nothing
         // needs one anymore).
+        // Silenced while dead when configured, per request - applies in
+        // BOTH normal content and PvP, since it keys off
+        // ConditionFlag.Unconscious (which the caller passes in) rather
+        // than anything PvP-specific. Scoped to the SOUNDS only: the
+        // vignette and glow keep rendering, since the request was
+        // specifically about audio during a death, not about hiding the
+        // effect entirely.
+        var soundsSilencedByDeath = configuration.ThresholdEffectSilenceSoundsWhenDead && isDead;
+
         var heartbeatActive = configuration.ThresholdEffectHeartbeatSoundEnabled
             && configuration.ThresholdEffectEnabled
+            && !soundsSilencedByDeath
             && currentValue >= configuration.ThresholdEffectHeartbeatSoundThreshold
             && !(configuration.ThresholdEffectHeartbeatOutOfCombatOnly && inCombat);
 
@@ -146,6 +156,7 @@ public sealed class ThresholdEffectOverlay(Configuration configuration, Heartbea
 
         var moanActive = configuration.ThresholdEffectMoanSoundEnabled
             && configuration.ThresholdEffectEnabled
+            && !soundsSilencedByDeath
             && currentValue >= configuration.ThresholdEffectMoanSoundThreshold;
 
         if (moanActive)

@@ -727,7 +727,10 @@ public sealed class Plugin : IDalamudPlugin
     // separately-written lambdas with identical bodies are NOT the same
     // delegate instance, so -= with a fresh lambda would silently fail
     // to unsubscribe the original one.
-    private void DrawThresholdEffect() => thresholdEffectOverlay.Draw(GetAppliedScale(), Condition[ConditionFlag.InCombat]);
+    private void DrawThresholdEffect() => thresholdEffectOverlay.Draw(
+        GetAppliedScale(),
+        Condition[ConditionFlag.InCombat],
+        Condition[ConditionFlag.Unconscious]);
 
     private void OnCommand(string command, string args)
     {
