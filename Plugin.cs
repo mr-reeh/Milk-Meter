@@ -830,7 +830,8 @@ public sealed class Plugin : IDalamudPlugin
             var standingStill = lastPlayerMovementTime >= 0d && secondsSinceMovement >= PositionStillnessRequiredSeconds;
             var charmedActive = emoteLoopTracker.IsCharmedActive();
             var ballDanceActive = emoteLoopTracker.IsBallDanceActive();
-            var attentionSuppressed = charmedActive || ballDanceActive;
+            var dazedActive = emoteLoopTracker.IsDazedActive();
+            var attentionSuppressed = charmedActive || ballDanceActive || dazedActive;
             var inCombatNow = Condition[ConditionFlag.InCombat];
             var combatSuppressed = Configuration.AttentionAutoTriggerOutOfCombatOnly && inCombatNow;
             var wouldTrigger = Configuration.AttentionAutoTriggerEnabled && scaleAtOrAbove && standingStill && !attentionSuppressed && !combatSuppressed;
@@ -843,7 +844,7 @@ public sealed class Plugin : IDalamudPlugin
                 $"Current job scale: {jobCurrentScale:F3}, AttentionThresholdScale: {Configuration.AttentionThresholdScale:F3}, at or above threshold: {scaleAtOrAbove}\n" +
                 $"Seconds since last movement: {(secondsSinceMovement.HasValue ? secondsSinceMovement.Value.ToString("F2") : "never moved yet")}, " +
                 $"required: {PositionStillnessRequiredSeconds:F1}, standing still: {standingStill}\n" +
-                $"Charmed active: {charmedActive}, Ball Dance active: {ballDanceActive} (either one suppresses the trigger entirely)\n" +
+                $"Charmed active: {charmedActive}, Ball Dance active: {ballDanceActive}, /dazed active: {dazedActive} (any one suppresses the trigger entirely)\n" +
                 $"AttentionAutoTriggerOutOfCombatOnly: {Configuration.AttentionAutoTriggerOutOfCombatOnly}, currently in combat: {inCombatNow}, suppressed by this: {combatSuppressed}\n" +
                 $"All conditions met (fires once per second while true, not a one-time trigger): {wouldTrigger}\n" +
                 $"Seconds until next fire (if conditions stay met): {secondsUntilNextFire:F1}");
@@ -1803,8 +1804,27 @@ public sealed class Plugin : IDalamudPlugin
 
             var scaleAtOrAboveAttentionThreshold = jobCurrentScale >= Configuration.AttentionThresholdScale;
 
+            // /dazed included per request, and it's a genuine conflict
+            // rather than a nicety: the drain pulls scale DOWN toward
+            // DazedDrainFloorScale, so starting /dazed while scale is
+            // still above AttentionThresholdScale meant this trigger
+            // fired within a second and swapped straight to /attention -
+            // cancelling the drain before it had done anything. Worse,
+            // performing an emote requires standing still, which is
+            // itself one of this trigger's own firing conditions, so the
+            // two were essentially guaranteed to collide.
+            //
+            // The Self Sucking Threshold feature (see
+            // SelfSuckingThresholdAutoAttentionEnabled) is the intended
+            // /dazed-to-/attention path, and it still works: it forces
+            // /attention itself once the drain actually reaches the
+            // floor. Once that swap happens /dazed is no longer active,
+            // so this trigger becomes eligible again and keeps
+            // /attention going from there - which is the desired
+            // hand-off, not a second conflict.
             var attentionSuppressed = emoteLoopTracker.IsCharmedActive()
-                || emoteLoopTracker.IsBallDanceActive();
+                || emoteLoopTracker.IsBallDanceActive()
+                || emoteLoopTracker.IsDazedActive();
 
             var shouldAttention = Configuration.AttentionAutoTriggerEnabled
                 && scaleAtOrAboveAttentionThreshold

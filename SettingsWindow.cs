@@ -504,8 +504,12 @@ public sealed class SettingsWindow(
                 "wakes the HUD gauge from its idle fade - same as Check Breasts (/attention) does.");
 
 
-            ImGui.TextDisabled("The Attention Auto-Trigger above is suppressed entirely while either of these " +
-                "is active, so it doesn't interrupt them. Defaults: Charmed = 33, Ball Dance = 6.");
+            ImGui.TextDisabled("The Attention Auto-Trigger above is suppressed entirely while Charmed or " +
+                "Ball Dance is active, so it doesn't interrupt them - and also while /dazed is active, " +
+                "so it can't cut Self Sucking Drain short before the drain reaches its floor. The Self " +
+                "Sucking Threshold setting is the intended /dazed-to-/attention hand-off; once it " +
+                "swaps, /dazed is no longer active and this trigger takes over keeping /attention " +
+                "going.");
 
             ImGui.TextDisabled("Ability Multipliers (Base Reduction x Multiplier = Amount Subtracted Per Use - " +
                 "negative flips it to an increase instead)");
