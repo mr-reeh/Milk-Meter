@@ -19,7 +19,7 @@ three breast-scaling modes fits how you want it to play:
   how fast it grows, how much each action shrinks (or even grows) it, and how big or small
   it's allowed to get. Works on every job and class in the game - every base class, every
   combat job, Beastmaster, and every crafter/gatherer all get passive growth. Beastmaster
-  tracks Rally (its own job-specific ability) rather than a Role Action, since Limited Jobs
+  tracks Gauge (its own job-specific ability) rather than a Role Action, since Limited Jobs
   can't use those. Crafters and gatherers don't have any of that available - no Role
   Actions, no shared combat GCD (crafting/gathering actions use an entirely separate recast
   system), and they never actually enter combat - so Jumping (movement-based, works for

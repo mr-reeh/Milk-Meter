@@ -31,7 +31,7 @@ public enum JobTrackingKind
 /// Tracks the recast state of whichever job-relevant ability(-ies) apply
 /// to the player's current job/class (Provoke plus each tank job's own
 /// extra abilities - see TrackedAbilityNames; Second Wind for melee/
-/// physical ranged DPS; Lucid Dreaming for casters/healers; Rally for
+/// physical ranged DPS; Lucid Dreaming for casters/healers; Gauge for
 /// Beastmaster, which can't use Role Actions at all but does have its
 /// own job-specific abilities; NONE for any crafter/gatherer, which
 /// still get passive growth
@@ -149,15 +149,14 @@ public sealed class JobBuffTracker
         // Beastmaster - a Limited Job explicitly barred from using any
         // Role Action, so none of the shared abilities above apply to
         // it. It does however have its own job-specific abilities, and
-        // Rally (refills the Beastmaster's own TP gauge) is tracked here
-        // per request - confirmed as a real BST ability via the job's
-        // action list rather than assumed. Its recast is 90s once the
-        // "Enhanced Rally" trait is learned at level 42, which is the
-        // figure RallyMultiplier's 3x default is derived from (90s
-        // against Provoke's 30s baseline); below that level the base
-        // recast is longer, so the effective rate will differ slightly
-        // until 42.
-        ["BST"] = ["Rally"],
+        // Gauge (a level 1 ability that checks a targeted beast's
+        // capture probability) is tracked here per request - confirmed
+        // as a real BST ability via the job's action list rather than
+        // assumed. NOTE its recast is only 3 SECONDS, by far the
+        // shortest of anything tracked in this file - see
+        // GaugeMultiplier's own doc comment for why its default
+        // multiplier is correspondingly tiny.
+        ["BST"] = ["Gauge"],
 
         // Crafters (DoH) - no Role Actions, no shared combat GCD recast
         // group, never enter ConditionFlag.InCombat. Passive growth
@@ -586,9 +585,9 @@ public static class JobScale
     /// name - fully in the user's hands via the settings window, not
     /// derived automatically. Defaults match each ability's real cooldown
     /// relative to Provoke's 30s baseline - Reprisal's 60s recast puts
-    /// it alongside Equilibrium/Lucid Dreaming at 2x, and Beastmaster's
-    /// Rally at 90s (post-Enhanced-Rally, learned at level 42) lands at
-    /// 3x. Any ability name not one of the six below (shouldn't
+    /// it alongside Equilibrium/Lucid Dreaming at 2x, while
+    /// Beastmaster's Gauge - a 3-SECOND recast - lands all the way down
+    /// at 0.1x. Any ability name not one of the six below (shouldn't
     /// currently happen, since these are the only ones in
     /// JobBuffTracker's TrackedAbilityNames) falls back to 1x.
     /// </summary>
@@ -599,7 +598,7 @@ public static class JobScale
         "Lucid Dreaming" => config.LucidDreamingMultiplier,
         "Second Wind" => config.SecondWindMultiplier,
         "Reprisal" => config.ReprisalMultiplier,
-        "Rally" => config.RallyMultiplier,
+        "Gauge" => config.GaugeMultiplier,
         _ => 1f,
     };
 }

@@ -263,8 +263,19 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Overuse-bonus multiplier for Reprisal (all four tank jobs - see TrackedAbilityNames). 60s recast, same 2x-Provoke baseline as Equilibrium/Lucid Dreaming. See JobScale.GetOveruseMultiplier.</summary>
     public float ReprisalMultiplier { get; set; } = 2.0f;
 
-    /// <summary>Overuse-bonus multiplier for Rally (Beastmaster only - see TrackedAbilityNames). 90s recast once "Enhanced Rally" is learned at level 42, so 3x against Provoke's 30s baseline. See JobScale.GetOveruseMultiplier.</summary>
-    public float RallyMultiplier { get; set; } = 3.0f;
+    /// <summary>
+    /// Overuse-bonus multiplier for Gauge (Beastmaster only - see
+    /// TrackedAbilityNames). 0.1 by default, which looks tiny next to
+    /// every other ability here but is deliberate: Gauge has a 3-SECOND
+    /// recast against Provoke's 30s baseline, so 0.1x keeps its
+    /// shrink-per-minute in the same ballpark as everything else rather
+    /// than 30x faster. Because it's spammable in a way no other
+    /// tracked ability is, this one is worth tuning by feel - raise it
+    /// if you want Beastmaster to shrink meaningfully faster than other
+    /// jobs, lower it toward 0 if incidental Gauge use during capture
+    /// hunting is eating your scale. See JobScale.GetOveruseMultiplier.
+    /// </summary>
+    public float GaugeMultiplier { get; set; } = 0.1f;
 
     /// <summary>
     /// Growth ceiling while in combat - the highest simply existing over

@@ -549,12 +549,16 @@ public sealed class SettingsWindow(
                 configuration.Save();
             }
 
-            var rallyMultiplier = configuration.RallyMultiplier;
-            if (ImGui.SliderFloat("Rally (Beastmaster)", ref rallyMultiplier, -5.0f, 5.0f, "%.2f"))
+            var gaugeMultiplier = configuration.GaugeMultiplier;
+            if (ImGui.SliderFloat("Gauge (Beastmaster)", ref gaugeMultiplier, -5.0f, 5.0f, "%.2f"))
             {
-                configuration.RallyMultiplier = rallyMultiplier;
+                configuration.GaugeMultiplier = gaugeMultiplier;
                 configuration.Save();
             }
+            ImGui.TextDisabled("Gauge has only a 3-second recast, far shorter than anything else here, " +
+                "so its default multiplier is deliberately tiny (0.10) to keep its shrink-per-minute " +
+                "comparable. Raise it if you want Beastmaster to shrink faster than other jobs; lower " +
+                "it toward 0 if incidental Gauge use while capture hunting is eating your scale.");
 
             ImGui.TextDisabled("Using a tracked ability subtracts (Base Reduction Per Action x that ability's " +
                 "own multiplier above) from your current scale, stacking if you spam it - so overusing your " +
